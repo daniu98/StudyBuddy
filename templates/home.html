@@ -1,0 +1,18 @@
+{% extends "base.html" %}
+{% block content %}
+<section class="hero">
+    <h1>StudyBuddy</h1>
+    <p>Create an account, log in, and save your enrolled courses to your profile.</p>
+
+    {% if current_user %}
+        <a class="button" href="{{ url_for('profile') }}">Go to Profile</a>
+    {% else %}
+        <a class="button" href="{{ url_for('signup') }}">Get Started</a>
+    {% endif %}
+</section>
+
+<section class="card">
+    <h2>Current Milestone</h2>
+    <p>This version focuses on authentication, profile setup, course selection, and database storage.</p>
+</section>
+{% endblock %}
