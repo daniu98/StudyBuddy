@@ -1,0 +1,49 @@
+body {
+    font-family: Arial;
+    background-color: #eeeeee;
+    margin: 0;
+}
+
+header {
+    background-color: #3366aa;
+    color: white;
+    padding: 15px;
+}
+
+nav a {
+    color: white;
+    margin-right: 15px;
+}
+
+main {
+    width: 80%;
+    margin: 20px auto;
+    background-color: white;
+    padding: 20px;
+}
+
+input, textarea, select {
+    display: block;
+    margin: 8px 0;
+    padding: 6px;
+    width: 300px;
+}
+
+button, .button {
+    background-color: #3366aa;
+    color: white;
+    padding: 8px;
+    border: none;
+}
+
+.card {
+    border: 1px solid gray;
+    padding: 10px;
+    margin: 10px 0;
+}
+
+.flash {
+    background-color: yellow;
+    padding: 8px;
+    margin-bottom: 10px;
+}
