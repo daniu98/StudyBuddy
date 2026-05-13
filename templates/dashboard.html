@@ -1,0 +1,33 @@
+{% extends "base.html" %}
+{% block content %}
+<h1>Your Dashboard</h1>
+<p>Study groups you have joined.</p>
+
+{% if groups %}
+    <ul class="dashboard-groups">
+    {% for g in groups %}
+        <li>
+            <a class="dashboard-group-card" href="{{ url_for('group_detail', group_id=g.id) }}">
+                <span class="dashboard-group-title">{{ g.title }}</span>
+                {% if g.meeting_time or g.location %}
+                    <span class="dashboard-group-meta">
+                        {% if g.meeting_time %}{{ g.meeting_time }}{% endif %}
+                        {% if g.meeting_time and g.location %} · {% endif %}
+                        {% if g.location %}{{ g.location }}{% endif %}
+                    </span>
+                {% endif %}
+                {% if g.description %}
+                    <span class="dashboard-group-desc">{{ g.description }}</span>
+                {% endif %}
+                <span class="dashboard-group-role">Your role: {{ g.role }}</span>
+            </a>
+        </li>
+    {% endfor %}
+    </ul>
+{% else %}
+    <section class="card">
+        <p>You have not joined any study groups yet.</p>
+        <p>When you join a group, it will show up here with a link to its page.</p>
+    </section>
+{% endif %}
+{% endblock %}

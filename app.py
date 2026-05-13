@@ -152,5 +152,83 @@ def profile():
     )
 
 
+@app.route("/dashboard")
+@login_required
+def dashboard():
+    conn = get_db()
+    user_id = session["user_id"]
+    groups = conn.execute(
+        """
+        SELECT sg.id, sg.title, sg.description, sg.meeting_time, sg.location,
+               gm.role, gm.joined_at
+        FROM study_groups sg
+        INNER JOIN group_members gm ON sg.id = gm.group_id
+        WHERE gm.user_id = ?
+        ORDER BY sg.title COLLATE NOCASE
+        """,
+        (user_id,),
+    ).fetchall()
+    conn.close()
+    return render_template("dashboard.html", groups=groups)
+
+
+@app.route("/groups/<int:group_id>")
+@login_required
+def group_detail(group_id):
+    conn = get_db()
+    user_id = session["user_id"]
+
+    member = conn.execute(
+        "SELECT role, joined_at FROM group_members WHERE group_id = ? AND user_id = ?",
+        (group_id, user_id),
+    ).fetchone()
+
+    group = conn.execute(
+        """
+        SELECT sg.*, u.name AS admin_name
+        FROM study_groups sg
+        JOIN users u ON sg.admin_id = u.id
+        WHERE sg.id = ?
+        """,
+        (group_id,),
+    ).fetchone()
+
+    if group is None:
+        conn.close()
+        flash("That study group does not exist.")
+        return redirect(url_for("dashboard"))
+
+    if member is None:
+        conn.close()
+        flash("You can only open groups you belong to.")
+        return redirect(url_for("dashboard"))
+
+    courses = conn.execute(
+        """
+        SELECT c.code, c.name
+        FROM courses c
+        JOIN group_courses gc ON c.id = gc.course_id
+        WHERE gc.group_id = ?
+        ORDER BY c.code
+        """,
+        (group_id,),
+    ).fetchall()
+
+    member_count = conn.execute(
+        "SELECT COUNT(*) AS n FROM group_members WHERE group_id = ?",
+        (group_id,),
+    ).fetchone()["n"]
+
+    conn.close()
+
+    return render_template(
+        "group_detail.html",
+        group=group,
+        courses=courses,
+        member_count=member_count,
+        membership=member,
+    )
+
+
 if __name__ == "__main__":
     app.run(debug=True)

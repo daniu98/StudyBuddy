@@ -47,3 +47,52 @@ button, .button {
     padding: 8px;
     margin-bottom: 10px;
 }
+
+.dashboard-groups {
+    list-style: none;
+    padding: 0;
+    margin: 16px 0 0;
+}
+
+.dashboard-groups li {
+    margin: 0 0 12px;
+}
+
+.dashboard-group-card {
+    display: block;
+    border: 1px solid #999;
+    padding: 12px 14px;
+    text-decoration: none;
+    color: inherit;
+    background: #f9f9f9;
+}
+
+.dashboard-group-card:hover {
+    border-color: #3366aa;
+    background: #eef4fc;
+}
+
+.dashboard-group-title {
+    display: block;
+    font-weight: bold;
+    font-size: 1.1em;
+    margin-bottom: 4px;
+}
+
+.dashboard-group-meta,
+.dashboard-group-desc,
+.dashboard-group-role {
+    display: block;
+    font-size: 0.9em;
+    color: #444;
+    margin-top: 4px;
+}
+
+.breadcrumb {
+    font-size: 0.9em;
+    margin-bottom: 8px;
+}
+
+.breadcrumb a {
+    color: #3366aa;
+}

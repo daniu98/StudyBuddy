@@ -1,0 +1,33 @@
+{% extends "base.html" %}
+{% block content %}
+<p class="breadcrumb"><a href="{{ url_for('dashboard') }}">Dashboard</a> / {{ group.title }}</p>
+
+<h1>{{ group.title }}</h1>
+
+<section class="card">
+    <p><strong>Admin:</strong> {{ group.admin_name }}</p>
+    <p><strong>Members:</strong> {{ member_count }} / {{ group.max_members }}</p>
+    <p><strong>Your role:</strong> {{ membership.role }} (since {{ membership.joined_at }})</p>
+    {% if group.meeting_time %}
+        <p><strong>Meeting time:</strong> {{ group.meeting_time }}</p>
+    {% endif %}
+    {% if group.location %}
+        <p><strong>Location:</strong> {{ group.location }}</p>
+    {% endif %}
+    {% if group.study_style %}
+        <p><strong>Study style:</strong> {{ group.study_style }}</p>
+    {% endif %}
+    {% if group.description %}
+        <p><strong>About:</strong> {{ group.description }}</p>
+    {% endif %}
+</section>
+
+{% if courses %}
+    <h2>Courses</h2>
+    <ul>
+    {% for c in courses %}
+        <li>{{ c.code }} — {{ c.name }}</li>
+    {% endfor %}
+    </ul>
+{% endif %}
+{% endblock %}
