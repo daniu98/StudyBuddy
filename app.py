@@ -151,6 +151,87 @@ def profile():
     )
 
 
+@app.route("/groups", methods=["GET"])
+@login_required
+def browse_groups():
+    q = request.args.get("q", "").strip()
+    raw_course_id = request.args.get("course_id", "").strip()
+    course_id = None
+    if raw_course_id:
+        try:
+            course_id = int(raw_course_id)
+        except ValueError:
+            course_id = None
+
+    conn = get_db()
+    user_id = session["user_id"]
+
+    conditions = []
+    params = []
+
+    if q:
+        pattern = f"%{q}%"
+        conditions.append(
+            """
+            (
+                sg.title LIKE ? COLLATE NOCASE
+                OR sg.description LIKE ? COLLATE NOCASE
+                OR sg.location LIKE ? COLLATE NOCASE
+                OR sg.study_style LIKE ? COLLATE NOCASE
+            )
+            """
+        )
+        params.extend([pattern, pattern, pattern, pattern])
+
+    if course_id is not None:
+        conditions.append(
+            """
+            EXISTS (
+                SELECT 1 FROM group_courses gc
+                WHERE gc.group_id = sg.id AND gc.course_id = ?
+            )
+            """
+        )
+        params.append(course_id)
+
+    where_clause = ""
+    if conditions:
+        where_clause = "WHERE " + " AND ".join(conditions)
+
+    groups = conn.execute(
+        f"""
+        SELECT sg.id, sg.title, sg.description, sg.meeting_time, sg.location,
+               sg.study_style, sg.max_members,
+               (SELECT COUNT(*) FROM group_members gm WHERE gm.group_id = sg.id) AS member_count,
+               (
+                   SELECT GROUP_CONCAT(c.code, ', ')
+                   FROM group_courses gc
+                   JOIN courses c ON c.id = gc.course_id
+                   WHERE gc.group_id = sg.id
+               ) AS course_codes,
+               EXISTS (
+                   SELECT 1 FROM group_members gm
+                   WHERE gm.group_id = sg.id AND gm.user_id = ?
+               ) AS is_member
+        FROM study_groups sg
+        {where_clause}
+        ORDER BY sg.title COLLATE NOCASE
+        """,
+        params + [user_id],
+    ).fetchall()
+
+    courses = conn.execute("SELECT * FROM courses ORDER BY code").fetchall()
+    conn.close()
+
+    return render_template(
+        "browse_groups.html",
+        groups=groups,
+        courses=courses,
+        q=q,
+        course_id=course_id,
+    )
+
+
 @app.route("/dashboard")
 @login_required
 def dashboard():

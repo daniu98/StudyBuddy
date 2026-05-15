@@ -9,7 +9,7 @@
 <header>
     <a class="logo" href="{{ url_for('home') }}">StudyBuddy</a>
     <nav>
-        <a href="/toadd">Find Groups</a>
+        <a href="{{ url_for('browse_groups') }}">Find Groups</a>
         {% if current_user %}
             <a href="{{ url_for('create_study_group') }}">Create Group</a>
             <a href="{{ url_for('dashboard') }}">Dashboard</a>
