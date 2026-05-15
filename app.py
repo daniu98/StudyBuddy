@@ -7,7 +7,6 @@ app = Flask(__name__)
 app.config["SECRET_KEY"] = "dev-secret-key-change-this"
 DATABASE = "studybuddy.db"
 
-
 def get_db():
     conn = sqlite3.connect(DATABASE)
     conn.row_factory = sqlite3.Row
@@ -229,6 +228,74 @@ def group_detail(group_id):
         membership=member,
     )
 
+
+@login_required
+def join_group(group_id):
+    conn = get_db()
+    user_id = session["user_id"]
+    try:
+        # check if user is already in group, go to except statement if so
+        usergroups = conn.execute(
+            "SELECT user_id FROM group_members WHERE user_id = ? AND group_id = ?",
+            user_id,
+            group_id,
+        )
+        if not usergroups.fetchone() is None:
+            raise sqlite3.IntegrityError
+        # put user in group's members list
+        cursor = conn.execute(
+            "INSERT INTO group_members (group_id, user_id) VALUES (?, ?)",
+            (group_id, user_id),
+        )
+        conn.commit()
+        flash("Group joined successfully.")
+        return group_detail(group_id)
+    except sqlite3.IntegrityError:
+        flash("You have already joined that group.")
+        return group_detail(group_id)
+    finally:
+        conn.close()
+
+@login_required
+def leave_group(group_id):
+    conn = get_db()
+    user_id = session["user_id"]
+    try:
+        # check if user is not in group (may be unnecessary)
+        usergroups = conn.execute(
+            "SELECT user_id FROM group_members WHERE user_id = ? AND group_id = ?",
+            user_id,
+            group_id,
+        )
+        if usergroups.fetchone() is None:
+            raise AssertionError
+        # check if group is full
+        member_count = conn.execute(
+            "SELECT COUNT(*) AS n FROM group_members WHERE group_id = ?",
+            (group_id,),
+        ).fetchone()["n"]
+        max_members = conn.execute(
+            "SELECT max_members FROM study_groups WHERE group_id = ?",
+            group_id,
+        ).fetchone()["max_members"]
+        if member_count == max_members:
+            raise sqlite3.IntegrityError
+        # remove user from group's members list
+        cursor = conn.execute(
+            "DELETE FROM group_members WHERE group_id = ? AND user_id = ?",
+            (group_id, user_id),
+        )
+        conn.commit()
+        flash("Group left successfully.")
+        return group_detail(group_id)
+    except AssertionError:
+        flash("You are not in that group.")
+        return group_detail(group_id)
+    except sqlite3.IntegrityError:
+        flash("The group is already full.")
+        return group_detail(group_id)
+    finally:
+        conn.close()
 
 if __name__ == "__main__":
     app.run(debug=True)
