@@ -230,5 +230,99 @@ def group_detail(group_id):
     )
 
 
+@app.route("/study-groups/new", methods=["GET", "POST"])
+@login_required
+def create_study_group():
+    user_id = session["user_id"]
+    conn = get_db()
+
+    if request.method == "POST":
+        title = request.form.get("title", "").strip()
+        description = request.form.get("description", "").strip() or None
+        meeting_time = request.form.get("meeting_time", "").strip() or None
+        location = request.form.get("location", "").strip() or None
+        study_style = request.form.get("study_style", "").strip() or None
+        raw_max = request.form.get("max_members", "").strip()
+        selected_course_ids = request.form.getlist("course_ids")
+
+        if not title:
+            conn.close()
+            flash("Group title is required.")
+            return redirect(url_for("create_study_group"))
+
+        try:
+            max_members = int(raw_max)
+        except ValueError:
+            conn.close()
+            flash("Maximum members must be a whole number.")
+            return redirect(url_for("create_study_group"))
+
+        if max_members < 1:
+            conn.close()
+            flash("Maximum members must be at least 1.")
+            return redirect(url_for("create_study_group"))
+
+        try:
+            cursor = conn.execute(
+                """
+                INSERT INTO study_groups (
+                    title, description, max_members, meeting_time,
+                    location, study_style, admin_id
+                )
+                VALUES (?, ?, ?, ?, ?, ?, ?)
+                """,
+                (
+                    title,
+                    description,
+                    max_members,
+                    meeting_time,
+                    location,
+                    study_style,
+                    user_id,
+                ),
+            )
+            group_id = cursor.lastrowid
+
+            conn.execute(
+                """
+                INSERT INTO group_members (group_id, user_id, role)
+                VALUES (?, ?, 'admin')
+                """,
+                (group_id, user_id),
+            )
+
+            for course_id in selected_course_ids:
+                try:
+                    cid = int(course_id)
+                except ValueError:
+                    continue
+                exists = conn.execute(
+                    "SELECT 1 FROM courses WHERE id = ?",
+                    (cid,),
+                ).fetchone()
+                if exists:
+                    conn.execute(
+                        """
+                        INSERT INTO group_courses (group_id, course_id)
+                        VALUES (?, ?)
+                        """,
+                        (group_id, cid),
+                    )
+
+            conn.commit()
+            flash("Study group created. You are the group admin.")
+            return redirect(url_for("home"))
+        except sqlite3.Error:
+            conn.rollback()
+            flash("Could not create the study group. Please try again.")
+            return redirect(url_for("create_study_group"))
+        finally:
+            conn.close()
+
+    courses = conn.execute("SELECT * FROM courses ORDER BY code").fetchall()
+    conn.close()
+    return render_template("create_study_group.html", courses=courses)
+
+
 if __name__ == "__main__":
     app.run(debug=True)
