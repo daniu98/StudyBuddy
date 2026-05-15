@@ -1,41 +1,63 @@
 {% extends "base.html" %}
 {% block content %}
 <h1>Create a study group</h1>
+<p>Set up the basics so classmates know what the group is for and how to meet.</p>
 
-<form method="post" class="form">
-    <label>
-        Title <span aria-hidden="true">*</span>
-        <input type="text" name="title" required maxlength="200">
+<form action="{{ url_for('create_study_group') }}" method="post" class="form study-group-form">
+    <label> Title 
+        <span aria-hidden="true">*</span>
+        <input
+            type="text"
+            name="title"
+            required
+            maxlength="200"
+            placeholder="e.g. CS31 midterm prep"
+        >
     </label>
-    <label>
-        Description
-        <textarea name="description" rows="4"></textarea>
+
+    <label> Description
+        <textarea
+            name="description"
+            rows="4"
+            placeholder="What will this group work on?"
+        ></textarea>
     </label>
-    <label>
-        Max members <span aria-hidden="true">*</span>
+
+    <label> Max members <span aria-hidden="true">*</span>
         <input type="number" name="max_members" min="1" value="6" required>
     </label>
-    <label>
-        Meeting time
-        <input type="text" name="meeting_time" placeholder="e.g. Tuesdays 7pm">
-    </label>
-    <label>
-        Location
-        <input type="text" name="location" placeholder="e.g. Powell Library">
-    </label>
-    <label>
-        Study style
-        <input type="text" name="study_style" placeholder="e.g. Exam prep, problem sets">
+
+    <label> Meeting time
+        <input type="text" name="meeting_time" placeholder="e.g. Tuesdays at 7 PM">
     </label>
 
-    <h2>Related courses</h2>
+    <label> Location
+        <input type="text" name="location" placeholder="e.g. Powell Library">
+    </label>
+
+    <label>
+        Study style
+        <select name="study_style">
+            <option value="">Choose a style</option>
+            <option value="Exam prep">Exam prep</option>
+            <option value="Problem sets">Problem sets</option>
+            <option value="Homework review">Homework review</option>
+            <option value="Lecture review">Lecture review</option>
+            <option value="Project work">Project work</option>
+            <option value="General study">General study</option>
+        </select>
+    </label>
+
+    <h2>Courses</h2>
     <div class="checkbox-list">
-    {% for course in courses %}
-        <label>
-            <input type="checkbox" name="course_ids" value="{{ course.id }}">
-            {{ course.code }} — {{ course.name }}
-        </label>
-    {% endfor %}
+        {% for course in courses %}
+            <label>
+                <input type="checkbox" name="course_ids" value="{{ course.id }}">
+                <span>{{ course.code }} - {{ course.name }}</span>
+            </label>
+        {% else %}
+            <p>No courses are available yet.</p>
+        {% endfor %}
     </div>
 
     <button type="submit">Create group</button>
