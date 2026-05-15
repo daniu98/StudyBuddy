@@ -214,9 +214,9 @@ def group_detail(group_id):
     ).fetchall()
 
     member_count = conn.execute(
-        "SELECT COUNT(*) AS n FROM group_members WHERE group_id = ?",
+        "SELECT member_count FROM study_groups WHERE group_id = ?",
         (group_id,),
-    ).fetchone()["n"]
+    ).fetchone()["member_count"]
 
     conn.close()
 
@@ -241,6 +241,7 @@ def create_study_group():
         location = request.form.get("location", "").strip() or None
         study_style = request.form.get("study_style", "").strip() or None
         raw_max = request.form.get("max_members", "").strip()
+        member_count = 1
         selected_course_ids = request.form.getlist("course_ids")
 
         if not title:
@@ -264,15 +265,16 @@ def create_study_group():
             cursor = conn.execute(
                 """
                 INSERT INTO study_groups (
-                    title, description, max_members, meeting_time,
+                    title, description, max_members, member_count, meeting_time,
                     location, study_style, admin_id
                 )
-                VALUES (?, ?, ?, ?, ?, ?, ?)
+                VALUES (?, ?, ?, ?, ?, ?, ?, ?)
                 """,
                 (
                     title,
                     description,
                     max_members,
+                    member_count,
                     meeting_time,
                     location,
                     study_style,
@@ -334,6 +336,17 @@ def join_group(group_id):
         )
         if not usergroups.fetchone() is None:
             raise sqlite3.IntegrityError
+        # check if group is full
+        member_count = conn.execute(
+            "SELECT member_count FROM study_groups WHERE group_id = ?",
+            group_id,
+        ).fetchone()["member_count"]
+        max_members = conn.execute(
+            "SELECT max_members FROM study_groups WHERE group_id = ?",
+            group_id,
+        ).fetchone()["max_members"]
+        if member_count == max_members:
+            raise AssertionError
         # put user in group's members list
         cursor = conn.execute(
             "INSERT INTO group_members (group_id, user_id) VALUES (?, ?)",
@@ -341,12 +354,15 @@ def join_group(group_id):
         )
         conn.commit()
         flash("Group joined successfully.")
-        return group_detail(group_id)
     except sqlite3.IntegrityError:
-        flash("You have already joined that group.")
-        return group_detail(group_id)
+        flash("You have already joined the group.")
+    except AssertionError:
+        flash("Cannot join group. The group is already full.")
+    except:
+        flash("Unknown error joining group.")
     finally:
         conn.close()
+    return group_detail(group_id)
 
 @login_required
 def leave_group(group_id):
@@ -361,17 +377,6 @@ def leave_group(group_id):
         )
         if usergroups.fetchone() is None:
             raise AssertionError
-        # check if group is full
-        member_count = conn.execute(
-            "SELECT COUNT(*) AS n FROM group_members WHERE group_id = ?",
-            (group_id,),
-        ).fetchone()["n"]
-        max_members = conn.execute(
-            "SELECT max_members FROM study_groups WHERE group_id = ?",
-            group_id,
-        ).fetchone()["max_members"]
-        if member_count == max_members:
-            raise sqlite3.IntegrityError
         # remove user from group's members list
         cursor = conn.execute(
             "DELETE FROM group_members WHERE group_id = ? AND user_id = ?",
@@ -379,15 +384,13 @@ def leave_group(group_id):
         )
         conn.commit()
         flash("Group left successfully.")
-        return group_detail(group_id)
     except AssertionError:
         flash("You are not in that group.")
-        return group_detail(group_id)
-    except sqlite3.IntegrityError:
-        flash("The group is already full.")
-        return group_detail(group_id)
+    except:
+        flash("Unknown error leaving group.")
     finally:
         conn.close()
+    return group_detail(group_id)
 
 if __name__ == "__main__":
     app.run(debug=True)
