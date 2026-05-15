@@ -29,6 +29,31 @@ input, textarea, select {
     width: 300px;
 }
 
+.form label {
+    display: block;
+    margin-bottom: 14px;
+}
+
+.form h2 {
+    margin-top: 24px;
+}
+
+.checkbox-list {
+    margin: 8px 0 18px;
+}
+
+.checkbox-list label {
+    display: flex;
+    align-items: center;
+    gap: 8px;
+    margin: 8px 0;
+}
+
+.checkbox-list input {
+    width: auto;
+    margin: 0;
+}
+
 button, .button {
     background-color: #3366aa;
     color: white;
