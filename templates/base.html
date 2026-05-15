@@ -11,7 +11,7 @@
     <nav>
         <a href="/toadd">Find Groups</a>
         {% if current_user %}
-            <a href="/toadd">Create Group</a>
+            <a href="{{ url_for('create_study_group') }}">Create Group</a>
             <a href="{{ url_for('dashboard') }}">Dashboard</a>
             <a href="{{ url_for('profile') }}">Profile</a>
             <a href="{{ url_for('logout') }}">Logout</a>

@@ -1,0 +1,43 @@
+{% extends "base.html" %}
+{% block content %}
+<h1>Create a study group</h1>
+
+<form method="post" class="form">
+    <label>
+        Title <span aria-hidden="true">*</span>
+        <input type="text" name="title" required maxlength="200">
+    </label>
+    <label>
+        Description
+        <textarea name="description" rows="4"></textarea>
+    </label>
+    <label>
+        Max members <span aria-hidden="true">*</span>
+        <input type="number" name="max_members" min="1" value="6" required>
+    </label>
+    <label>
+        Meeting time
+        <input type="text" name="meeting_time" placeholder="e.g. Tuesdays 7pm">
+    </label>
+    <label>
+        Location
+        <input type="text" name="location" placeholder="e.g. Powell Library">
+    </label>
+    <label>
+        Study style
+        <input type="text" name="study_style" placeholder="e.g. Exam prep, problem sets">
+    </label>
+
+    <h2>Related courses</h2>
+    <div class="checkbox-list">
+    {% for course in courses %}
+        <label>
+            <input type="checkbox" name="course_ids" value="{{ course.id }}">
+            {{ course.code }} — {{ course.name }}
+        </label>
+    {% endfor %}
+    </div>
+
+    <button type="submit">Create group</button>
+</form>
+{% endblock %}

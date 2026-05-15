@@ -76,4 +76,4 @@ INSERT INTO courses (code, name) VALUES
 ('MATH33a', 'Math 5'),
 ('MATH31b', 'Math 2'),
 ('MATH32b', 'Math 4'),
-('MATH33b', 'Math 6'),
+('MATH33b', 'Math 6');
