@@ -61,7 +61,7 @@ def signup():
             flash("Password must be at least 6 characters.")
             return redirect(url_for("signup"))
 
-        password_hash = generate_password_hash(password)
+        password_hash = generate_password_hash(password, method="pbkdf2:sha256")
 
         conn = get_db()
         try:
