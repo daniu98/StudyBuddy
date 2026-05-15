@@ -214,7 +214,7 @@ def group_detail(group_id):
     ).fetchall()
 
     member_count = conn.execute(
-        "SELECT member_count FROM study_groups WHERE group_id = ?",
+        "SELECT member_count FROM study_groups WHERE id = ?",
         (group_id,),
     ).fetchone()["member_count"]
 
@@ -338,11 +338,11 @@ def join_group(group_id):
             raise sqlite3.IntegrityError
         # check if group is full
         member_count = conn.execute(
-            "SELECT member_count FROM study_groups WHERE group_id = ?",
+            "SELECT member_count FROM study_groups WHERE id = ?",
             group_id,
         ).fetchone()["member_count"]
         max_members = conn.execute(
-            "SELECT max_members FROM study_groups WHERE group_id = ?",
+            "SELECT max_members FROM study_groups WHERE id = ?",
             group_id,
         ).fetchone()["max_members"]
         if member_count == max_members:
