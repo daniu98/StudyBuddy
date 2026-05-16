@@ -433,6 +433,8 @@ def join_group(group_id):
             "INSERT INTO group_members (group_id, user_id) VALUES (?, ?)",
             (group_id, user_id),
         )
+        # increase group member count by 1
+        cursor2 = conn.execute("UPDATE study_groups SET member_count = ? WHERE id = ?", member_count + 1, group_id)
         conn.commit()
         flash("Group joined successfully.")
     except sqlite3.IntegrityError:
@@ -463,6 +465,12 @@ def leave_group(group_id):
             "DELETE FROM group_members WHERE group_id = ? AND user_id = ?",
             (group_id, user_id),
         )
+        # decrease group member count by 1
+        member_count = conn.execute(
+            "SELECT member_count FROM study_groups WHERE id = ?",
+            group_id,
+        ).fetchone()["member_count"]
+        cursor2 = conn.execute("UPDATE study_groups SET member_count = ? WHERE id = ?", member_count - 1, group_id)
         conn.commit()
         flash("Group left successfully.")
     except AssertionError:
