@@ -294,10 +294,16 @@ def group_detail(group_id):
         (group_id,),
     ).fetchall()
 
-    member_count = conn.execute(
-        "SELECT member_count FROM study_groups WHERE id = ?",
+    members = conn.execute(
+        """
+        SELECT u.name, gm.role, gm.joined_at
+        FROM group_members gm
+        JOIN users u ON gm.user_id = u.id
+        WHERE gm.group_id = ?
+        ORDER BY gm.role DESC, u.name COLLATE NOCASE
+        """,
         (group_id,),
-    ).fetchone()["member_count"]
+    ).fetchall()
 
     conn.close()
 
@@ -305,7 +311,7 @@ def group_detail(group_id):
         "group_detail.html",
         group=group,
         courses=courses,
-        member_count=member_count,
+        members=members,
         membership=member,
     )
 
