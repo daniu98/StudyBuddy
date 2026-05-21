@@ -23,6 +23,14 @@ def login_required(view):
     return wrapped_view
 
 
+def user_is_group_member(conn, group_id, user_id):
+    row = conn.execute(
+        "SELECT 1 FROM group_members WHERE group_id = ? AND user_id = ?",
+        (group_id, user_id),
+    ).fetchone()
+    return row is not None
+
+
 def current_user():
     if "user_id" not in session:
         return None
@@ -252,6 +260,50 @@ def dashboard():
     return render_template("dashboard.html", groups=groups)
 
 
+@app.route("/groups/<int:group_id>/messages", methods=["POST"])
+@login_required
+def post_group_message(group_id):
+    body = request.form.get("body", "").strip()
+    if not body:
+        flash("Message cannot be empty.")
+        return redirect(url_for("group_detail", group_id=group_id))
+
+    if len(body) > 2000:
+        flash("Message is too long (max 2000 characters).")
+        return redirect(url_for("group_detail", group_id=group_id))
+
+    conn = get_db()
+    user_id = session["user_id"]
+
+    group = conn.execute(
+        "SELECT id FROM study_groups WHERE id = ?",
+        (group_id,),
+    ).fetchone()
+    if group is None:
+        conn.close()
+        flash("That study group does not exist.")
+        return redirect(url_for("dashboard"))
+
+    if not user_is_group_member(conn, group_id, user_id):
+        conn.close()
+        flash("Only group members can post messages.")
+        return redirect(url_for("dashboard"))
+
+    try:
+        conn.execute(
+            "INSERT INTO messages (group_id, user_id, body) VALUES (?, ?, ?)",
+            (group_id, user_id, body),
+        )
+        conn.commit()
+    except sqlite3.Error:
+        conn.rollback()
+        flash("Could not send message. Please try again.")
+    finally:
+        conn.close()
+
+    return redirect(url_for("group_detail", group_id=group_id))
+
+
 @app.route("/groups/<int:group_id>")
 @login_required
 def group_detail(group_id):
@@ -305,6 +357,17 @@ def group_detail(group_id):
         (group_id,),
     ).fetchall()
 
+    messages = conn.execute(
+        """
+        SELECT m.body, m.created_at, u.name AS author_name
+        FROM messages m
+        JOIN users u ON m.user_id = u.id
+        WHERE m.group_id = ?
+        ORDER BY m.created_at ASC
+        """,
+        (group_id,),
+    ).fetchall()
+
     conn.close()
 
     return render_template(
@@ -312,6 +375,7 @@ def group_detail(group_id):
         group=group,
         courses=courses,
         members=members,
+        messages=messages,
         membership=member,
     )
 
