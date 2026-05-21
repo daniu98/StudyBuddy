@@ -37,4 +37,25 @@
     {% endfor %}
     </ul>
 {% endif %}
+
+<h2>Group chat</h2>
+{% if messages %}
+    <ul class="group-messages">
+    {% for msg in messages %}
+        <li>
+            <strong>{{ msg.author_name }}</strong>
+            <span class="message-time">{{ msg.created_at }}</span>
+            <p>{{ msg.body }}</p>
+        </li>
+    {% endfor %}
+    </ul>
+{% else %}
+    <p>No messages yet. Start the conversation below.</p>
+{% endif %}
+
+<form method="post" action="{{ url_for('post_group_message', group_id=group.id) }}">
+    <label for="body">New message</label>
+    <textarea id="body" name="body" rows="3" maxlength="2000" required placeholder="Write a message to your group…"></textarea>
+    <button type="submit">Send</button>
+</form>
 {% endblock %}
