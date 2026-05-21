@@ -87,6 +87,11 @@
                 </a>
             {% else %}
                 </article>
+                {% if g.member_count < g.max_members %}
+                    <form class="group-action-form" method="post" action="{{ url_for('join_group', group_id=g.id) }}">
+                        <button type="submit">Join group</button>
+                    </form>
+                {% endif %}
             {% endif %}
         </li>
     {% endfor %}
