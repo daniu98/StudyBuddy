@@ -252,7 +252,7 @@ def dashboard():
     return render_template("dashboard.html", groups=groups)
 
 
-@app.route("/groups/<int:group_id>")
+@app.route("/groups/<int:group_id>", methods=["GET", "POST"])
 @login_required
 def group_detail(group_id):
     conn = get_db()
@@ -283,6 +283,22 @@ def group_detail(group_id):
         flash("You can only open groups you belong to.")
         return redirect(url_for("dashboard"))
 
+    if request.method == "POST":
+        body = request.form.get("body", "").strip()
+        if not body:
+            conn.close()
+            flash("Message cannot be empty.")
+            return redirect(url_for("group_detail", group_id=group_id))
+
+        conn.execute(
+            "INSERT INTO messages (group_id, user_id, body) VALUES (?, ?, ?)",
+            (group_id, user_id, body),
+        )
+        conn.commit()
+        conn.close()
+        flash("Message posted.")
+        return redirect(url_for("group_detail", group_id=group_id))
+
     courses = conn.execute(
         """
         SELECT c.code, c.name
@@ -299,6 +315,17 @@ def group_detail(group_id):
         (group_id,),
     ).fetchone()["member_count"]
 
+    messages = conn.execute(
+        """
+        SELECT m.body, m.created_at, u.name AS sender_name
+        FROM messages m
+        JOIN users u ON m.user_id = u.id
+        WHERE m.group_id = ?
+        ORDER BY m.created_at ASC
+        """,
+        (group_id,),
+    ).fetchall()
+
     conn.close()
 
     return render_template(
@@ -307,6 +334,7 @@ def group_detail(group_id):
         courses=courses,
         member_count=member_count,
         membership=member,
+        messages=messages,
     )
 
 @app.route("/study-groups/new", methods=["GET", "POST"])
