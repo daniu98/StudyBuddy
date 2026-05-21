@@ -20,6 +20,9 @@
     {% if group.description %}
         <p><strong>About:</strong> {{ group.description }}</p>
     {% endif %}
+    <form class="group-action-form" method="post" action="{{ url_for('leave_group', group_id=group.id) }}">
+        <button type="submit" class="button-secondary">Leave group</button>
+    </form>
 </section>
 
 {% if courses %}
@@ -52,7 +55,8 @@
 
     <form method="post" class="form message-form" action="{{ url_for('group_detail', group_id=group.id) }}">
         <label for="body">New message</label>
-        <textarea id="body" name="body" rows="4" required placeholder="Write a message to your group…"></textarea>
+        <textarea id="body" name="body" rows="4" maxlength="{{ message_max_length }}" required placeholder="Write a message to your group…"></textarea>
+        <p class="message-hint">Up to {{ message_max_length }} characters. Newest messages appear first.</p>
         <button type="submit">Send message</button>
     </form>
 </section>
