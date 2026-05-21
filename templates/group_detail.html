@@ -30,4 +30,30 @@
     {% endfor %}
     </ul>
 {% endif %}
+
+<section class="message-board">
+    <h2>Message Board</h2>
+
+    {% if messages %}
+        <ul class="message-list">
+        {% for msg in messages %}
+            <li class="message-item">
+                <p class="message-meta">
+                    <strong>{{ msg.sender_name }}</strong>
+                    <time datetime="{{ msg.created_at }}">{{ msg.created_at }}</time>
+                </p>
+                <p class="message-body">{{ msg.body }}</p>
+            </li>
+        {% endfor %}
+        </ul>
+    {% else %}
+        <p class="message-empty">No messages yet. Start the conversation below.</p>
+    {% endif %}
+
+    <form method="post" class="form message-form" action="{{ url_for('group_detail', group_id=group.id) }}">
+        <label for="body">New message</label>
+        <textarea id="body" name="body" rows="4" required placeholder="Write a message to your group…"></textarea>
+        <button type="submit">Send message</button>
+    </form>
+</section>
 {% endblock %}
