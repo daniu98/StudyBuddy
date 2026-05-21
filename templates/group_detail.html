@@ -6,7 +6,7 @@
 
 <section class="card">
     <p><strong>Admin:</strong> {{ group.admin_name }}</p>
-    <p><strong>Members:</strong> {{ member_count }} / {{ group.max_members }}</p>
+    <p><strong>Members:</strong> {{ members|length }} / {{ group.max_members }}</p>
     <p><strong>Your role:</strong> {{ membership.role }} (since {{ membership.joined_at }})</p>
     {% if group.meeting_time %}
         <p><strong>Meeting time:</strong> {{ group.meeting_time }}</p>
@@ -21,6 +21,13 @@
         <p><strong>About:</strong> {{ group.description }}</p>
     {% endif %}
 </section>
+
+<h2>Members</h2>
+<ul>
+{% for m in members %}
+    <li>{{ m.name }} — {{ m.role }}{% if m.joined_at %} (joined {{ m.joined_at }}){% endif %}</li>
+{% endfor %}
+</ul>
 
 {% if courses %}
     <h2>Courses</h2>
