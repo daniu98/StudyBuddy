@@ -335,6 +335,22 @@ def group_detail(group_id):
         flash("You can only open groups you belong to.")
         return redirect(url_for("dashboard"))
 
+    if request.method == "POST":
+        body = request.form.get("body", "").strip()
+        if not body:
+            conn.close()
+            flash("Message cannot be empty.")
+            return redirect(url_for("group_detail", group_id=group_id))
+
+        conn.execute(
+            "INSERT INTO messages (group_id, user_id, body) VALUES (?, ?, ?)",
+            (group_id, user_id, body),
+        )
+        conn.commit()
+        conn.close()
+        flash("Message posted.")
+        return redirect(url_for("group_detail", group_id=group_id))
+
     courses = conn.execute(
         """
         SELECT c.code, c.name
@@ -377,6 +393,7 @@ def group_detail(group_id):
         members=members,
         messages=messages,
         membership=member,
+        messages=messages,
     )
 
 @app.route("/study-groups/new", methods=["GET", "POST"])
