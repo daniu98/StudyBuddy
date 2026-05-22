@@ -168,6 +168,26 @@ button, .button {
     box-sizing: border-box;
 }
 
+.message-hint {
+    font-size: 0.85em;
+    color: #666;
+    margin: 4px 0 10px;
+}
+
+.group-action-form {
+    margin-top: 8px;
+}
+
+.group-action-form button,
+.button-secondary {
+    background-color: #666;
+}
+
+.group-action-form button:hover,
+.button-secondary:hover {
+    background-color: #444;
+}
+
 .browse-search {
     margin: 20px 0;
     padding: 16px;
