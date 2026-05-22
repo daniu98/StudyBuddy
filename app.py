@@ -6,6 +6,7 @@ from werkzeug.security import generate_password_hash, check_password_hash
 app = Flask(__name__)
 app.config["SECRET_KEY"] = "dev-secret-key-change-this"
 DATABASE = "studybuddy.db"
+MESSAGE_MAX_LENGTH = 2000
 
 def get_db():
     conn = sqlite3.connect(DATABASE)
@@ -363,7 +364,7 @@ def group_detail(group_id):
         FROM messages m
         JOIN users u ON m.user_id = u.id
         WHERE m.group_id = ?
-        ORDER BY m.created_at ASC
+        ORDER BY m.created_at DESC
         """,
         (group_id,),
     ).fetchall()
@@ -474,82 +475,80 @@ def create_study_group():
     conn.close()
     return render_template("create_study_group.html", courses=courses)
 
+@app.route("/groups/<int:group_id>/join", methods=["POST"])
 @login_required
 def join_group(group_id):
     conn = get_db()
     user_id = session["user_id"]
     try:
-        # check if user is already in group, go to except statement if so
-        usergroups = conn.execute(
-            "SELECT user_id FROM group_members WHERE user_id = ? AND group_id = ?",
-            user_id,
-            group_id,
-        )
-        if not usergroups.fetchone() is None:
-            raise sqlite3.IntegrityError
-        # check if group is full
-        member_count = conn.execute(
-            "SELECT member_count FROM study_groups WHERE id = ?",
-            group_id,
-        ).fetchone()["member_count"]
-        max_members = conn.execute(
-            "SELECT max_members FROM study_groups WHERE id = ?",
-            group_id,
-        ).fetchone()["max_members"]
-        if member_count == max_members:
-            raise AssertionError
-        # put user in group's members list
-        cursor = conn.execute(
+        group = conn.execute(
+            "SELECT max_members, member_count FROM study_groups WHERE id = ?",
+            (group_id,),
+        ).fetchone()
+        if group is None:
+            flash("That study group does not exist.")
+            return redirect(url_for("browse_groups"))
+
+        if conn.execute(
+            "SELECT 1 FROM group_members WHERE user_id = ? AND group_id = ?",
+            (user_id, group_id),
+        ).fetchone():
+            flash("You have already joined the group.")
+            return redirect(url_for("group_detail", group_id=group_id))
+
+        if group["member_count"] >= group["max_members"]:
+            flash("Cannot join group. The group is already full.")
+            return redirect(url_for("browse_groups"))
+
+        conn.execute(
             "INSERT INTO group_members (group_id, user_id) VALUES (?, ?)",
             (group_id, user_id),
         )
-        # increase group member count by 1
-        cursor2 = conn.execute("UPDATE study_groups SET member_count = ? WHERE id = ?", member_count + 1, group_id)
+        conn.execute(
+            "UPDATE study_groups SET member_count = member_count + 1 WHERE id = ?",
+            (group_id,),
+        )
         conn.commit()
         flash("Group joined successfully.")
-    except sqlite3.IntegrityError:
-        flash("You have already joined the group.")
-    except AssertionError:
-        flash("Cannot join group. The group is already full.")
-    except:
-        flash("Unknown error joining group.")
+        return redirect(url_for("group_detail", group_id=group_id))
+    except sqlite3.Error:
+        conn.rollback()
+        flash("Could not join the group. Please try again.")
+        return redirect(url_for("browse_groups"))
     finally:
         conn.close()
-    return group_detail(group_id)
 
+
+@app.route("/groups/<int:group_id>/leave", methods=["POST"])
 @login_required
 def leave_group(group_id):
     conn = get_db()
     user_id = session["user_id"]
     try:
-        # check if user is not in group (may be unnecessary)
-        usergroups = conn.execute(
-            "SELECT user_id FROM group_members WHERE user_id = ? AND group_id = ?",
-            user_id,
-            group_id,
-        )
-        if usergroups.fetchone() is None:
-            raise AssertionError
-        # remove user from group's members list
-        cursor = conn.execute(
+        if not conn.execute(
+            "SELECT 1 FROM group_members WHERE user_id = ? AND group_id = ?",
+            (user_id, group_id),
+        ).fetchone():
+            flash("You are not in that group.")
+            return redirect(url_for("browse_groups"))
+
+        conn.execute(
             "DELETE FROM group_members WHERE group_id = ? AND user_id = ?",
             (group_id, user_id),
         )
-        # decrease group member count by 1
-        member_count = conn.execute(
-            "SELECT member_count FROM study_groups WHERE id = ?",
-            group_id,
-        ).fetchone()["member_count"]
-        cursor2 = conn.execute("UPDATE study_groups SET member_count = ? WHERE id = ?", member_count - 1, group_id)
+        conn.execute(
+            "UPDATE study_groups SET member_count = member_count - 1 WHERE id = ? AND member_count > 0",
+            (group_id,),
+        )
         conn.commit()
         flash("Group left successfully.")
-    except AssertionError:
-        flash("You are not in that group.")
-    except:
-        flash("Unknown error leaving group.")
+        return redirect(url_for("browse_groups"))
+    except sqlite3.Error:
+        conn.rollback()
+        flash("Could not leave the group. Please try again.")
+        return redirect(url_for("group_detail", group_id=group_id))
     finally:
         conn.close()
-    return group_detail(group_id)
 
 if __name__ == "__main__":
     app.run(debug=True)
