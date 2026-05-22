@@ -1,0 +1,400 @@
+import sqlite3
+
+from flask import Blueprint, flash, redirect, render_template, request, session, url_for
+
+from .db import MESSAGE_MAX_LENGTH, get_db, login_required, user_is_group_member
+
+bp = Blueprint("groups", __name__)
+
+
+@bp.route("/groups", methods=["GET"])
+@login_required
+def browse_groups():
+    q = request.args.get("q", "").strip()
+    raw_course_id = request.args.get("course_id", "").strip()
+    course_id = None
+    if raw_course_id:
+        try:
+            course_id = int(raw_course_id)
+        except ValueError:
+            course_id = None
+
+    conn = get_db()
+    user_id = session["user_id"]
+
+    conditions = []
+    params = []
+
+    if q:
+        pattern = f"%{q}%"
+        conditions.append(
+            """
+            (
+                sg.title LIKE ? COLLATE NOCASE
+                OR sg.description LIKE ? COLLATE NOCASE
+                OR sg.location LIKE ? COLLATE NOCASE
+                OR sg.study_style LIKE ? COLLATE NOCASE
+            )
+            """
+        )
+        params.extend([pattern, pattern, pattern, pattern])
+
+    if course_id is not None:
+        conditions.append(
+            """
+            EXISTS (
+                SELECT 1 FROM group_courses gc
+                WHERE gc.group_id = sg.id AND gc.course_id = ?
+            )
+            """
+        )
+        params.append(course_id)
+
+    where_clause = ""
+    if conditions:
+        where_clause = "WHERE " + " AND ".join(conditions)
+
+    groups = conn.execute(
+        f"""
+        SELECT sg.id, sg.title, sg.description, sg.meeting_time, sg.location,
+               sg.study_style, sg.max_members,
+               (SELECT COUNT(*) FROM group_members gm WHERE gm.group_id = sg.id) AS member_count,
+               (
+                   SELECT GROUP_CONCAT(c.code, ', ')
+                   FROM group_courses gc
+                   JOIN courses c ON c.id = gc.course_id
+                   WHERE gc.group_id = sg.id
+               ) AS course_codes,
+               EXISTS (
+                   SELECT 1 FROM group_members gm
+                   WHERE gm.group_id = sg.id AND gm.user_id = ?
+               ) AS is_member
+        FROM study_groups sg
+        {where_clause}
+        ORDER BY sg.title COLLATE NOCASE
+        """,
+        params + [user_id],
+    ).fetchall()
+
+    courses = conn.execute("SELECT * FROM courses ORDER BY code").fetchall()
+    conn.close()
+
+    return render_template(
+        "browse_groups.html",
+        groups=groups,
+        courses=courses,
+        q=q,
+        course_id=course_id,
+    )
+
+
+@bp.route("/dashboard")
+@login_required
+def dashboard():
+    conn = get_db()
+    user_id = session["user_id"]
+    groups = conn.execute(
+        """
+        SELECT sg.id, sg.title, sg.description, sg.meeting_time, sg.location,
+               gm.role, gm.joined_at
+        FROM study_groups sg
+        INNER JOIN group_members gm ON sg.id = gm.group_id
+        WHERE gm.user_id = ?
+        ORDER BY sg.title COLLATE NOCASE
+        """,
+        (user_id,),
+    ).fetchall()
+    conn.close()
+    return render_template("dashboard.html", groups=groups)
+
+
+@bp.route("/groups/<int:group_id>/messages", methods=["POST"])
+@login_required
+def post_group_message(group_id):
+    body = request.form.get("body", "").strip()
+    if not body:
+        flash("Message cannot be empty.")
+        return redirect(url_for("groups.group_detail", group_id=group_id))
+
+    if len(body) > MESSAGE_MAX_LENGTH:
+        flash(f"Message is too long (max {MESSAGE_MAX_LENGTH} characters).")
+        return redirect(url_for("groups.group_detail", group_id=group_id))
+
+    conn = get_db()
+    user_id = session["user_id"]
+
+    group = conn.execute(
+        "SELECT id FROM study_groups WHERE id = ?",
+        (group_id,),
+    ).fetchone()
+    if group is None:
+        conn.close()
+        flash("That study group does not exist.")
+        return redirect(url_for("groups.dashboard"))
+
+    if not user_is_group_member(conn, group_id, user_id):
+        conn.close()
+        flash("Only group members can post messages.")
+        return redirect(url_for("groups.dashboard"))
+
+    try:
+        conn.execute(
+            "INSERT INTO messages (group_id, user_id, body) VALUES (?, ?, ?)",
+            (group_id, user_id, body),
+        )
+        conn.commit()
+    except sqlite3.Error:
+        conn.rollback()
+        flash("Could not send message. Please try again.")
+    finally:
+        conn.close()
+
+    return redirect(url_for("groups.group_detail", group_id=group_id))
+
+
+@bp.route("/groups/<int:group_id>")
+@login_required
+def group_detail(group_id):
+    conn = get_db()
+    user_id = session["user_id"]
+
+    member = conn.execute(
+        "SELECT role, joined_at FROM group_members WHERE group_id = ? AND user_id = ?",
+        (group_id, user_id),
+    ).fetchone()
+
+    group = conn.execute(
+        """
+        SELECT sg.*, u.name AS admin_name
+        FROM study_groups sg
+        JOIN users u ON sg.admin_id = u.id
+        WHERE sg.id = ?
+        """,
+        (group_id,),
+    ).fetchone()
+
+    if group is None:
+        conn.close()
+        flash("That study group does not exist.")
+        return redirect(url_for("groups.dashboard"))
+
+    if member is None:
+        conn.close()
+        flash("You can only open groups you belong to.")
+        return redirect(url_for("groups.dashboard"))
+
+    courses = conn.execute(
+        """
+        SELECT c.code, c.name
+        FROM courses c
+        JOIN group_courses gc ON c.id = gc.course_id
+        WHERE gc.group_id = ?
+        ORDER BY c.code
+        """,
+        (group_id,),
+    ).fetchall()
+
+    members = conn.execute(
+        """
+        SELECT u.name, gm.role, gm.joined_at
+        FROM group_members gm
+        JOIN users u ON gm.user_id = u.id
+        WHERE gm.group_id = ?
+        ORDER BY gm.role DESC, u.name COLLATE NOCASE
+        """,
+        (group_id,),
+    ).fetchall()
+
+    messages = conn.execute(
+        """
+        SELECT m.body, m.created_at, u.name AS author_name
+        FROM messages m
+        JOIN users u ON m.user_id = u.id
+        WHERE m.group_id = ?
+        ORDER BY m.created_at DESC
+        """,
+        (group_id,),
+    ).fetchall()
+
+    conn.close()
+
+    return render_template(
+        "group_detail.html",
+        group=group,
+        courses=courses,
+        members=members,
+        messages=messages,
+        membership=member,
+    )
+
+
+@bp.route("/study-groups/new", methods=["GET", "POST"])
+@login_required
+def create_study_group():
+    user_id = session["user_id"]
+    conn = get_db()
+
+    if request.method == "POST":
+        title = request.form.get("title", "").strip()
+        description = request.form.get("description", "").strip() or None
+        meeting_time = request.form.get("meeting_time", "").strip() or None
+        location = request.form.get("location", "").strip() or None
+        study_style = request.form.get("study_style", "").strip() or None
+        raw_max = request.form.get("max_members", "").strip()
+        member_count = 1
+        selected_course_ids = request.form.getlist("course_ids")
+
+        if not title:
+            conn.close()
+            flash("Group title is required.")
+            return redirect(url_for("groups.create_study_group"))
+
+        try:
+            max_members = int(raw_max)
+        except ValueError:
+            conn.close()
+            flash("Maximum members must be a whole number.")
+            return redirect(url_for("groups.create_study_group"))
+
+        if max_members < 1:
+            conn.close()
+            flash("Maximum members must be at least 1.")
+            return redirect(url_for("groups.create_study_group"))
+
+        try:
+            cursor = conn.execute(
+                """
+                INSERT INTO study_groups (
+                    title, description, max_members, member_count, meeting_time,
+                    location, study_style, admin_id
+                )
+                VALUES (?, ?, ?, ?, ?, ?, ?, ?)
+                """,
+                (
+                    title,
+                    description,
+                    max_members,
+                    member_count,
+                    meeting_time,
+                    location,
+                    study_style,
+                    user_id,
+                ),
+            )
+            group_id = cursor.lastrowid
+
+            conn.execute(
+                """
+                INSERT INTO group_members (group_id, user_id, role)
+                VALUES (?, ?, 'admin')
+                """,
+                (group_id, user_id),
+            )
+
+            for course_id in selected_course_ids:
+                try:
+                    cid = int(course_id)
+                except ValueError:
+                    continue
+                exists = conn.execute(
+                    "SELECT 1 FROM courses WHERE id = ?",
+                    (cid,),
+                ).fetchone()
+                if exists:
+                    conn.execute(
+                        """
+                        INSERT INTO group_courses (group_id, course_id)
+                        VALUES (?, ?)
+                        """,
+                        (group_id, cid),
+                    )
+
+            conn.commit()
+            flash("Study group created. You are the group admin.")
+            return redirect(url_for("main.home"))
+        except sqlite3.Error:
+            conn.rollback()
+            flash("Could not create the study group. Please try again.")
+            return redirect(url_for("groups.create_study_group"))
+        finally:
+            conn.close()
+
+    courses = conn.execute("SELECT * FROM courses ORDER BY code").fetchall()
+    conn.close()
+    return render_template("create_study_group.html", courses=courses)
+
+
+@bp.route("/groups/<int:group_id>/join", methods=["POST"])
+@login_required
+def join_group(group_id):
+    conn = get_db()
+    user_id = session["user_id"]
+    try:
+        group = conn.execute(
+            "SELECT max_members, member_count FROM study_groups WHERE id = ?",
+            (group_id,),
+        ).fetchone()
+        if group is None:
+            flash("That study group does not exist.")
+            return redirect(url_for("groups.browse_groups"))
+
+        if conn.execute(
+            "SELECT 1 FROM group_members WHERE user_id = ? AND group_id = ?",
+            (user_id, group_id),
+        ).fetchone():
+            flash("You have already joined the group.")
+            return redirect(url_for("groups.group_detail", group_id=group_id))
+
+        if group["member_count"] >= group["max_members"]:
+            flash("Cannot join group. The group is already full.")
+            return redirect(url_for("groups.browse_groups"))
+
+        conn.execute(
+            "INSERT INTO group_members (group_id, user_id) VALUES (?, ?)",
+            (group_id, user_id),
+        )
+        conn.execute(
+            "UPDATE study_groups SET member_count = member_count + 1 WHERE id = ?",
+            (group_id,),
+        )
+        conn.commit()
+        flash("Group joined successfully.")
+        return redirect(url_for("groups.group_detail", group_id=group_id))
+    except sqlite3.Error:
+        conn.rollback()
+        flash("Could not join the group. Please try again.")
+        return redirect(url_for("groups.browse_groups"))
+    finally:
+        conn.close()
+
+
+@bp.route("/groups/<int:group_id>/leave", methods=["POST"])
+@login_required
+def leave_group(group_id):
+    conn = get_db()
+    user_id = session["user_id"]
+    try:
+        if not conn.execute(
+            "SELECT 1 FROM group_members WHERE user_id = ? AND group_id = ?",
+            (user_id, group_id),
+        ).fetchone():
+            flash("You are not in that group.")
+            return redirect(url_for("groups.browse_groups"))
+
+        conn.execute(
+            "DELETE FROM group_members WHERE group_id = ? AND user_id = ?",
+            (group_id, user_id),
+        )
+        conn.execute(
+            "UPDATE study_groups SET member_count = member_count - 1 WHERE id = ? AND member_count > 0",
+            (group_id,),
+        )
+        conn.commit()
+        flash("Group left successfully.")
+        return redirect(url_for("groups.browse_groups"))
+    except sqlite3.Error:
+        conn.rollback()
+        flash("Could not leave the group. Please try again.")
+        return redirect(url_for("groups.group_detail", group_id=group_id))
+    finally:
+        conn.close()
