@@ -3,7 +3,7 @@
 <h1>Find Study Groups</h1>
 <p>Browse and search groups created by other students.</p>
 
-<form class="browse-search" method="get" action="{{ url_for('browse_groups') }}">
+<form class="browse-search" method="get" action="{{ url_for('groups.browse_groups') }}">
     <div class="browse-search-row">
         <label class="browse-search-label" for="q">Search</label>
         <input
@@ -29,7 +29,7 @@
     <div class="browse-search-actions">
         <button type="submit">Search</button>
         {% if q or course_id %}
-            <a class="button browse-search-clear" href="{{ url_for('browse_groups') }}">Clear</a>
+            <a class="button browse-search-clear" href="{{ url_for('groups.browse_groups') }}">Clear</a>
         {% endif %}
     </div>
 </form>
@@ -53,7 +53,7 @@
     {% for g in groups %}
         <li>
             {% if g.is_member %}
-                <a class="dashboard-group-card" href="{{ url_for('group_detail', group_id=g.id) }}">
+                <a class="dashboard-group-card" href="{{ url_for('groups.group_detail', group_id=g.id) }}">
             {% else %}
                 <article class="dashboard-group-card browse-group-card-static">
             {% endif %}
@@ -88,7 +88,7 @@
             {% else %}
                 </article>
                 {% if g.member_count < g.max_members %}
-                    <form class="group-action-form" method="post" action="{{ url_for('join_group', group_id=g.id) }}">
+                    <form class="group-action-form" method="post" action="{{ url_for('groups.join_group', group_id=g.id) }}">
                         <button type="submit">Join group</button>
                     </form>
                 {% endif %}
@@ -102,7 +102,7 @@
             <p>Try a different search term or course filter.</p>
         {% else %}
             <p>No study groups have been created yet.</p>
-            <p><a class="button" href="{{ url_for('create_study_group') }}">Create the first group</a></p>
+            <p><a class="button" href="{{ url_for('groups.create_study_group') }}">Create the first group</a></p>
         {% endif %}
     </section>
 {% endif %}
