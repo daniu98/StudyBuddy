@@ -1,4 +1,4 @@
-from studdybuddy import create_app
+from studybuddy import create_app
 
 app = create_app()
 
