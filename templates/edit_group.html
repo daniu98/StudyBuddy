@@ -7,10 +7,49 @@
 </p>
 
 <h1>Edit {{ group.title }}</h1>
+<p>Update the core details for this study group.</p>
 
-<section class="card">
-    <p>This page is ready for the edit group form.</p>
-    <p>Only admins of this group can access this page.</p>
-    <p><a class="button" href="{{ url_for('groups.group_detail', group_id=group.id) }}">Back to group</a></p>
-</section>
+<form class="form study-group-form" method="post" action="#">
+    <label> Title
+        <span aria-hidden="true">*</span>
+        <input
+            type="text"
+            name="title"
+            value="{{ group.title }}"
+            required
+            maxlength="200"
+            placeholder="e.g. CS31 midterm prep"
+        >
+    </label>
+
+    <label> Description
+        <textarea
+            name="description"
+            rows="4"
+            placeholder="What will this group work on?"
+        >{{ group.description or "" }}</textarea>
+    </label>
+
+    <label> Location
+        <input
+            type="text"
+            name="location"
+            value="{{ group.location or "" }}"
+            placeholder="e.g. Powell Library"
+        >
+    </label>
+
+    <label> Max members <span aria-hidden="true">*</span>
+        <input
+            type="number"
+            name="max_members"
+            min="1"
+            value="{{ group.max_members }}"
+            required
+        >
+    </label>
+
+    <button type="button" disabled>Save changes</button>
+    <a class="button" href="{{ url_for('groups.group_detail', group_id=group.id) }}">Back to group</a>
+</form>
 {% endblock %}
