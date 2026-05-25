@@ -49,6 +49,31 @@
         >
     </label>
 
+    <label> Meeting time
+        <input
+            type="datetime-local"
+            name="meeting_time"
+            value="{{ meeting_time_value }}"
+        >
+        {% if group.meeting_time and not meeting_time_value %}
+            <small>Current saved value: {{ group.meeting_time }}</small>
+        {% endif %}
+    </label>
+
+    <label> Study style
+        <select name="study_style">
+            <option value="">Choose a style</option>
+            {% if group.study_style and group.study_style not in study_style_options %}
+                <option value="{{ group.study_style }}" selected>{{ group.study_style }}</option>
+            {% endif %}
+            {% for style in study_style_options %}
+                <option value="{{ style }}" {% if group.study_style == style %}selected{% endif %}>
+                    {{ style }}
+                </option>
+            {% endfor %}
+        </select>
+    </label>
+
     <button type="button" disabled>Save changes</button>
     <a class="button" href="{{ url_for('groups.group_detail', group_id=group.id) }}">Back to group</a>
 </form>
