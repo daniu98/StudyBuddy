@@ -375,7 +375,7 @@ def edit_group(group_id):
                     ),
                 )
                 conn.commit()
-                flash("Study group updated.")
+                flash("Study group updated.", "success")
                 conn.close()
                 return redirect(url_for("groups.group_detail", group_id=group_id))
             except sqlite3.Error:
