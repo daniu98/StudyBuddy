@@ -33,6 +33,7 @@ CREATE TABLE study_groups (
     title TEXT NOT NULL,
     description TEXT,
     max_members INTEGER NOT NULL,
+    member_count INTEGER NOT NULL,
     meeting_time TEXT,
     location TEXT,
     study_style TEXT,

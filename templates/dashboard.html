@@ -7,7 +7,7 @@
     <ul class="dashboard-groups">
     {% for g in groups %}
         <li>
-            <a class="dashboard-group-card" href="{{ url_for('group_detail', group_id=g.id) }}">
+            <a class="dashboard-group-card" href="{{ url_for('groups.group_detail', group_id=g.id) }}">
                 <span class="dashboard-group-title">{{ g.title }}</span>
                 {% if g.meeting_time or g.location %}
                     <span class="dashboard-group-meta">

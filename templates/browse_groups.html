@@ -1,0 +1,109 @@
+{% extends "base.html" %}
+{% block content %}
+<h1>Find Study Groups</h1>
+<p>Browse and search groups created by other students.</p>
+
+<form class="browse-search" method="get" action="{{ url_for('groups.browse_groups') }}">
+    <div class="browse-search-row">
+        <label class="browse-search-label" for="q">Search</label>
+        <input
+            type="search"
+            id="q"
+            name="q"
+            value="{{ q }}"
+            placeholder="Title, description, location, study style…"
+            class="browse-search-input"
+        >
+    </div>
+    <div class="browse-search-row">
+        <label class="browse-search-label" for="course_id">Course</label>
+        <select id="course_id" name="course_id" class="browse-search-select">
+            <option value="">All courses</option>
+            {% for c in courses %}
+                <option value="{{ c.id }}" {% if course_id == c.id %}selected{% endif %}>
+                    {{ c.code }} — {{ c.name }}
+                </option>
+            {% endfor %}
+        </select>
+    </div>
+    <div class="browse-search-actions">
+        <button type="submit">Search</button>
+        {% if q or course_id %}
+            <a class="button browse-search-clear" href="{{ url_for('groups.browse_groups') }}">Clear</a>
+        {% endif %}
+    </div>
+</form>
+
+{% if q or course_id %}
+    <p class="browse-results-summary">
+        {% if groups %}
+            Showing {{ groups|length }} group{% if groups|length != 1 %}s{% endif %}
+            {% if q %} matching “{{ q }}”{% endif %}
+            {% if course_id %} for the selected course{% endif %}.
+        {% else %}
+            No groups found
+            {% if q %} matching “{{ q }}”{% endif %}
+            {% if course_id %} for the selected course{% endif %}.
+        {% endif %}
+    </p>
+{% endif %}
+
+{% if groups %}
+    <ul class="dashboard-groups browse-groups">
+    {% for g in groups %}
+        <li>
+            {% if g.is_member %}
+                <a class="dashboard-group-card" href="{{ url_for('groups.group_detail', group_id=g.id) }}">
+            {% else %}
+                <article class="dashboard-group-card browse-group-card-static">
+            {% endif %}
+                <span class="dashboard-group-title">{{ g.title }}</span>
+                {% if g.course_codes %}
+                    <span class="browse-group-courses">{{ g.course_codes }}</span>
+                {% endif %}
+                <span class="browse-group-members">
+                    {{ g.member_count }} / {{ g.max_members }} members
+                    {% if g.member_count >= g.max_members %}
+                        <span class="browse-group-full">(full)</span>
+                    {% endif %}
+                </span>
+                {% if g.meeting_time or g.location %}
+                    <span class="dashboard-group-meta">
+                        {% if g.meeting_time %}{{ g.meeting_time }}{% endif %}
+                        {% if g.meeting_time and g.location %} · {% endif %}
+                        {% if g.location %}{{ g.location }}{% endif %}
+                    </span>
+                {% endif %}
+                {% if g.study_style %}
+                    <span class="browse-group-style">{{ g.study_style }}</span>
+                {% endif %}
+                {% if g.description %}
+                    <span class="dashboard-group-desc">{{ g.description }}</span>
+                {% endif %}
+                {% if g.is_member %}
+                    <span class="dashboard-group-role">You are a member</span>
+                {% endif %}
+            {% if g.is_member %}
+                </a>
+            {% else %}
+                </article>
+                {% if g.member_count < g.max_members %}
+                    <form class="group-action-form" method="post" action="{{ url_for('groups.join_group', group_id=g.id) }}">
+                        <button type="submit">Join group</button>
+                    </form>
+                {% endif %}
+            {% endif %}
+        </li>
+    {% endfor %}
+    </ul>
+{% else %}
+    <section class="card">
+        {% if q or course_id %}
+            <p>Try a different search term or course filter.</p>
+        {% else %}
+            <p>No study groups have been created yet.</p>
+            <p><a class="button" href="{{ url_for('groups.create_study_group') }}">Create the first group</a></p>
+        {% endif %}
+    </section>
+{% endif %}
+{% endblock %}
