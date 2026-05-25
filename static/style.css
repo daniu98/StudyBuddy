@@ -121,3 +121,135 @@ button, .button {
 .breadcrumb a {
     color: #3366aa;
 }
+
+.message-board {
+    margin-top: 28px;
+    padding-top: 20px;
+    border-top: 1px solid #ccc;
+}
+
+.message-list {
+    list-style: none;
+    padding: 0;
+    margin: 0 0 20px;
+}
+
+.message-item {
+    border: 1px solid #ddd;
+    padding: 10px 12px;
+    margin-bottom: 10px;
+    background: #f9f9f9;
+}
+
+.message-meta {
+    margin: 0 0 6px;
+    font-size: 0.9em;
+    color: #555;
+}
+
+.message-meta time {
+    margin-left: 8px;
+    color: #777;
+}
+
+.message-body {
+    margin: 0;
+    white-space: pre-wrap;
+}
+
+.message-empty {
+    color: #555;
+    margin-bottom: 16px;
+}
+
+.message-form textarea {
+    width: 100%;
+    max-width: 560px;
+    box-sizing: border-box;
+}
+
+.message-hint {
+    font-size: 0.85em;
+    color: #666;
+    margin: 4px 0 10px;
+}
+
+.group-action-form {
+    margin-top: 8px;
+}
+
+.group-action-form button,
+.button-secondary {
+    background-color: #666;
+}
+
+.group-action-form button:hover,
+.button-secondary:hover {
+    background-color: #444;
+}
+
+.browse-search {
+    margin: 20px 0;
+    padding: 16px;
+    background: #f5f5f5;
+    border: 1px solid #ccc;
+}
+
+.browse-search-row {
+    margin-bottom: 12px;
+}
+
+.browse-search-label {
+    display: block;
+    font-weight: bold;
+    margin-bottom: 4px;
+}
+
+.browse-search-input,
+.browse-search-select {
+    width: 100%;
+    max-width: 480px;
+    box-sizing: border-box;
+}
+
+.browse-search-actions {
+    display: flex;
+    align-items: center;
+    gap: 10px;
+    margin-top: 8px;
+}
+
+.browse-search-actions button,
+.browse-search-clear {
+    display: inline-block;
+    text-decoration: none;
+}
+
+.browse-results-summary {
+    color: #555;
+    margin: 0 0 12px;
+}
+
+.browse-group-courses {
+    display: block;
+    font-size: 0.9em;
+    color: #3366aa;
+    margin-top: 4px;
+}
+
+.browse-group-members,
+.browse-group-style {
+    display: block;
+    font-size: 0.9em;
+    color: #444;
+    margin-top: 4px;
+}
+
+.browse-group-full {
+    color: #a33;
+    font-weight: bold;
+}
+
+.browse-group-card-static {
+    cursor: default;
+}
