@@ -84,9 +84,20 @@ button:disabled {
 }
 
 .flash {
-    background-color: yellow;
+    background-color: #fff3b0;
+    border: 1px solid #d8bd3a;
     padding: 8px;
     margin-bottom: 10px;
+}
+
+.flash p {
+    margin: 0;
+}
+
+.flash-success {
+    background-color: #dff0d8;
+    border-color: #8abf75;
+    color: #2f5f2f;
 }
 
 .dashboard-groups {
