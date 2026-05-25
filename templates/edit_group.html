@@ -7,10 +7,74 @@
 </p>
 
 <h1>Edit {{ group.title }}</h1>
+<p>Update the core details for this study group.</p>
 
-<section class="card">
-    <p>This page is ready for the edit group form.</p>
-    <p>Only admins of this group can access this page.</p>
-    <p><a class="button" href="{{ url_for('groups.group_detail', group_id=group.id) }}">Back to group</a></p>
-</section>
+<form class="form study-group-form" method="post" action="#">
+    <label> Title
+        <span aria-hidden="true">*</span>
+        <input
+            type="text"
+            name="title"
+            value="{{ group.title }}"
+            required
+            maxlength="200"
+            placeholder="e.g. CS31 midterm prep"
+        >
+    </label>
+
+    <label> Description
+        <textarea
+            name="description"
+            rows="4"
+            placeholder="What will this group work on?"
+        >{{ group.description or "" }}</textarea>
+    </label>
+
+    <label> Location
+        <input
+            type="text"
+            name="location"
+            value="{{ group.location or "" }}"
+            placeholder="e.g. Powell Library"
+        >
+    </label>
+
+    <label> Max members <span aria-hidden="true">*</span>
+        <input
+            type="number"
+            name="max_members"
+            min="1"
+            value="{{ group.max_members }}"
+            required
+        >
+    </label>
+
+    <label> Meeting time
+        <input
+            type="datetime-local"
+            name="meeting_time"
+            value="{{ meeting_time_value }}"
+        >
+        {% if group.meeting_time and not meeting_time_value %}
+            <small>Current saved value: {{ group.meeting_time }}</small>
+        {% endif %}
+    </label>
+
+    <label> Study style
+        <select name="study_style">
+            <option value="">Choose a style</option>
+            {% if group.study_style and group.study_style not in study_style_options %}
+                <option value="{{ group.study_style }}" selected>{{ group.study_style }}</option>
+            {% endif %}
+            {% for style in study_style_options %}
+                <option value="{{ style }}" {% if group.study_style == style %}selected{% endif %}>
+                    {{ style }}
+                </option>
+            {% endfor %}
+        </select>
+    </label>
+
+    <button type="button" disabled>Save changes</button>
+    <a class="button" href="{{ url_for('groups.group_detail', group_id=group.id) }}">Back to group</a>
+</form>
 {% endblock %}
