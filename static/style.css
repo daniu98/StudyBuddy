@@ -61,6 +61,22 @@ button, .button {
     border: none;
 }
 
+button:disabled {
+    background-color: #999;
+    cursor: not-allowed;
+}
+
+.form-error,
+.field-error {
+    color: #a33;
+    font-size: 0.9em;
+}
+
+.field-error {
+    display: block;
+    margin-top: 4px;
+}
+
 .card {
     border: 1px solid gray;
     padding: 10px;
