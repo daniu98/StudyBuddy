@@ -1,10 +1,34 @@
 import sqlite3
+from datetime import datetime
 
 from flask import Blueprint, flash, redirect, render_template, request, session, url_for
 
 from .db import MESSAGE_MAX_LENGTH, get_db, login_required, user_is_group_member
 
 bp = Blueprint("groups", __name__)
+
+STUDY_STYLE_OPTIONS = [
+    "Exam prep",
+    "Problem sets",
+    "Homework review",
+    "Lecture review",
+    "Project work",
+    "General study",
+]
+
+
+def datetime_local_value(value):
+    if not value:
+        return ""
+
+    value = value.strip()
+    for fmt in ("%Y-%m-%dT%H:%M", "%Y-%m-%d %H:%M", "%Y-%m-%d %H:%M:%S"):
+        try:
+            return datetime.strptime(value, fmt).strftime("%Y-%m-%dT%H:%M")
+        except ValueError:
+            pass
+
+    return ""
 
 
 @bp.route("/groups", methods=["GET"])
@@ -265,7 +289,12 @@ def edit_group(group_id):
 
     conn.close()
 
-    return render_template("edit_group.html", group=group)
+    return render_template(
+        "edit_group.html",
+        group=group,
+        meeting_time_value=datetime_local_value(group["meeting_time"]),
+        study_style_options=STUDY_STYLE_OPTIONS,
+    )
 
 
 @bp.route("/study-groups/new", methods=["GET", "POST"])
