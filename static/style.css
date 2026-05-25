@@ -100,6 +100,12 @@ button:disabled {
     color: #2f5f2f;
 }
 
+.flash-error {
+    background-color: #f8d7da;
+    border-color: #d99aa1;
+    color: #7a1f2b;
+}
+
 .dashboard-groups {
     list-style: none;
     padding: 0;

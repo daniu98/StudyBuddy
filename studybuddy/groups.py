@@ -1,11 +1,16 @@
 import sqlite3
 from datetime import datetime
 
-from flask import Blueprint, flash, redirect, render_template, request, session, url_for
+from flask import Blueprint, abort, flash, redirect, render_template, request, session, url_for
 
 from .db import MESSAGE_MAX_LENGTH, get_db, login_required, user_is_group_member
 
 bp = Blueprint("groups", __name__)
+
+TITLE_MAX_LENGTH = 200
+DESCRIPTION_MAX_LENGTH = 1000
+LOCATION_MAX_LENGTH = 200
+MAX_MEMBERS_LIMIT = 100
 
 STUDY_STYLE_OPTIONS = [
     "Exam prep",
@@ -176,8 +181,7 @@ def post_group_message(group_id):
     ).fetchone()
     if group is None:
         conn.close()
-        flash("That study group does not exist.")
-        return redirect(url_for("groups.dashboard"))
+        abort(404, description="That study group does not exist.")
 
     if not user_is_group_member(conn, group_id, user_id):
         conn.close()
@@ -222,8 +226,7 @@ def group_detail(group_id):
 
     if group is None:
         conn.close()
-        flash("That study group does not exist.")
-        return redirect(url_for("groups.dashboard"))
+        abort(404, description="That study group does not exist.")
 
     if member is None:
         conn.close()
@@ -293,8 +296,7 @@ def edit_group(group_id):
 
     if group is None:
         conn.close()
-        flash("That study group does not exist.")
-        return redirect(url_for("groups.dashboard"))
+        abort(404, description="That study group does not exist.")
 
     membership = conn.execute(
         """
@@ -307,13 +309,15 @@ def edit_group(group_id):
 
     if membership is None or membership["role"] != "admin":
         conn.close()
-        flash("Only group admins can edit this study group.")
+        flash("You no longer have permission to edit this study group.", "error")
         return redirect(url_for("groups.dashboard"))
 
     member_count = conn.execute(
         "SELECT COUNT(*) AS n FROM group_members WHERE group_id = ?",
         (group_id,),
     ).fetchone()["n"]
+    min_members = max(1, member_count)
+    max_members_limit = max(MAX_MEMBERS_LIMIT, member_count)
 
     errors = {}
     form_data = edit_group_form_data(group)
@@ -330,6 +334,16 @@ def edit_group(group_id):
 
         if not form_data["title"]:
             errors["title"] = "Group title is required."
+        elif len(form_data["title"]) > TITLE_MAX_LENGTH:
+            errors["title"] = f"Group title must be {TITLE_MAX_LENGTH} characters or fewer."
+
+        if len(form_data["description"]) > DESCRIPTION_MAX_LENGTH:
+            errors["description"] = (
+                f"Description must be {DESCRIPTION_MAX_LENGTH} characters or fewer."
+            )
+
+        if len(form_data["location"]) > LOCATION_MAX_LENGTH:
+            errors["location"] = f"Location must be {LOCATION_MAX_LENGTH} characters or fewer."
 
         try:
             max_members = int(form_data["max_members"])
@@ -343,6 +357,10 @@ def edit_group(group_id):
             elif max_members < member_count:
                 errors["max_members"] = (
                     f"Maximum members cannot be less than the current {member_count} members."
+                )
+            elif max_members > max_members_limit:
+                errors["max_members"] = (
+                    f"Maximum members cannot be more than {max_members_limit}."
                 )
 
         meeting_time, meeting_time_error = meeting_time_storage_value(form_data["meeting_time"])
@@ -391,6 +409,11 @@ def edit_group(group_id):
         form_data=form_data,
         meeting_time_value=form_data["meeting_time"],
         study_style_options=STUDY_STYLE_OPTIONS,
+        title_max_length=TITLE_MAX_LENGTH,
+        description_max_length=DESCRIPTION_MAX_LENGTH,
+        location_max_length=LOCATION_MAX_LENGTH,
+        max_members_limit=max_members_limit,
+        min_members=min_members,
     )
 
 
