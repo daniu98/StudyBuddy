@@ -31,6 +31,29 @@ def datetime_local_value(value):
     return ""
 
 
+def meeting_time_storage_value(value):
+    if not value:
+        return None, None
+
+    try:
+        parsed = datetime.strptime(value, "%Y-%m-%dT%H:%M")
+    except ValueError:
+        return None, "Use the date and time picker to choose a valid meeting time."
+
+    return parsed.strftime("%Y-%m-%d %H:%M"), None
+
+
+def edit_group_form_data(group):
+    return {
+        "title": group["title"],
+        "description": group["description"] or "",
+        "location": group["location"] or "",
+        "max_members": group["max_members"],
+        "meeting_time": datetime_local_value(group["meeting_time"]),
+        "study_style": group["study_style"] or "",
+    }
+
+
 @bp.route("/groups", methods=["GET"])
 @login_required
 def browse_groups():
@@ -252,7 +275,7 @@ def group_detail(group_id):
     )
 
 
-@bp.route("/groups/<int:group_id>/edit", methods=["GET"])
+@bp.route("/groups/<int:group_id>/edit", methods=["GET", "POST"])
 @login_required
 def edit_group(group_id):
     conn = get_db()
@@ -287,12 +310,86 @@ def edit_group(group_id):
         flash("Only group admins can edit this study group.")
         return redirect(url_for("groups.dashboard"))
 
+    member_count = conn.execute(
+        "SELECT COUNT(*) AS n FROM group_members WHERE group_id = ?",
+        (group_id,),
+    ).fetchone()["n"]
+
+    errors = {}
+    form_data = edit_group_form_data(group)
+
+    if request.method == "POST":
+        form_data = {
+            "title": request.form.get("title", "").strip(),
+            "description": request.form.get("description", "").strip(),
+            "location": request.form.get("location", "").strip(),
+            "max_members": request.form.get("max_members", "").strip(),
+            "meeting_time": request.form.get("meeting_time", "").strip(),
+            "study_style": request.form.get("study_style", "").strip(),
+        }
+
+        if not form_data["title"]:
+            errors["title"] = "Group title is required."
+
+        try:
+            max_members = int(form_data["max_members"])
+        except ValueError:
+            errors["max_members"] = "Maximum members must be a whole number."
+            max_members = None
+
+        if max_members is not None:
+            if max_members < 1:
+                errors["max_members"] = "Maximum members must be at least 1."
+            elif max_members < member_count:
+                errors["max_members"] = (
+                    f"Maximum members cannot be less than the current {member_count} members."
+                )
+
+        meeting_time, meeting_time_error = meeting_time_storage_value(form_data["meeting_time"])
+        if meeting_time_error:
+            errors["meeting_time"] = meeting_time_error
+
+        if (
+            form_data["study_style"]
+            and form_data["study_style"] not in STUDY_STYLE_OPTIONS
+        ):
+            errors["study_style"] = "Choose one of the available study styles."
+
+        if not errors:
+            try:
+                conn.execute(
+                    """
+                    UPDATE study_groups
+                    SET title = ?, description = ?, location = ?, max_members = ?,
+                        meeting_time = ?, study_style = ?
+                    WHERE id = ?
+                    """,
+                    (
+                        form_data["title"],
+                        form_data["description"] or None,
+                        form_data["location"] or None,
+                        max_members,
+                        meeting_time,
+                        form_data["study_style"] or None,
+                        group_id,
+                    ),
+                )
+                conn.commit()
+                flash("Study group updated.")
+                conn.close()
+                return redirect(url_for("groups.group_detail", group_id=group_id))
+            except sqlite3.Error:
+                conn.rollback()
+                errors["form"] = "Could not update the study group. Please try again."
+
     conn.close()
 
     return render_template(
         "edit_group.html",
         group=group,
-        meeting_time_value=datetime_local_value(group["meeting_time"]),
+        errors=errors,
+        form_data=form_data,
+        meeting_time_value=form_data["meeting_time"],
         study_style_options=STUDY_STYLE_OPTIONS,
     )
 
