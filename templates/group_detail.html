@@ -4,6 +4,10 @@
 
 <h1>{{ group.title }}</h1>
 
+{% if membership.role == "admin" %}
+    <p><a class="button" href="/groups/{{ group.id }}/edit">Edit Group</a></p>
+{% endif %}
+
 <section class="card">
     <p><strong>Admin:</strong> {{ group.admin_name }}</p>
     <p><strong>Members:</strong> {{ members|length }} / {{ group.max_members }}</p>
