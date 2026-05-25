@@ -1,0 +1,16 @@
+{% extends "base.html" %}
+{% block content %}
+<p class="breadcrumb">
+    <a href="{{ url_for('dashboard') }}">Dashboard</a> /
+    <a href="{{ url_for('group_detail', group_id=group.id) }}">{{ group.title }}</a> /
+    Edit Group
+</p>
+
+<h1>Edit {{ group.title }}</h1>
+
+<section class="card">
+    <p>This page is ready for the edit group form.</p>
+    <p>Only admins of this group can access this page.</p>
+    <p><a class="button" href="{{ url_for('group_detail', group_id=group.id) }}">Back to group</a></p>
+</section>
+{% endblock %}

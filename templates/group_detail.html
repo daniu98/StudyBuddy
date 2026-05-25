@@ -5,7 +5,7 @@
 <h1>{{ group.title }}</h1>
 
 {% if membership.role == "admin" %}
-    <p><a class="button" href="/groups/{{ group.id }}/edit">Edit Group</a></p>
+    <p><a class="button" href="{{ url_for('edit_group', group_id=group.id) }}">Edit Group</a></p>
 {% endif %}
 
 <section class="card">

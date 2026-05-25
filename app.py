@@ -228,6 +228,47 @@ def group_detail(group_id):
         membership=member,
     )
 
+
+@app.route("/groups/<int:group_id>/edit", methods=["GET"])
+@login_required
+def edit_group(group_id):
+    conn = get_db()
+    user_id = session["user_id"]
+
+    group = conn.execute(
+        """
+        SELECT sg.*, u.name AS admin_name
+        FROM study_groups sg
+        JOIN users u ON sg.admin_id = u.id
+        WHERE sg.id = ?
+        """,
+        (group_id,),
+    ).fetchone()
+
+    if group is None:
+        conn.close()
+        flash("That study group does not exist.")
+        return redirect(url_for("dashboard"))
+
+    membership = conn.execute(
+        """
+        SELECT role
+        FROM group_members
+        WHERE group_id = ? AND user_id = ?
+        """,
+        (group_id, user_id),
+    ).fetchone()
+
+    if membership is None or membership["role"] != "admin":
+        conn.close()
+        flash("Only group admins can edit this study group.")
+        return redirect(url_for("dashboard"))
+
+    conn.close()
+
+    return render_template("edit_group.html", group=group)
+
+
 @app.route("/study-groups/new", methods=["GET", "POST"])
 @login_required
 def create_study_group():
