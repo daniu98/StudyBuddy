@@ -1,0 +1,9 @@
+{% extends "base.html" %}
+{% block content %}
+<h1>Page not found</h1>
+
+<section class="card">
+    <p>{{ error.description or "The page you requested does not exist." }}</p>
+    <p><a class="button" href="{{ url_for('groups.dashboard') }}">Back to dashboard</a></p>
+</section>
+{% endblock %}

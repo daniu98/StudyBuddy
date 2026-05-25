@@ -26,7 +26,7 @@
             name="title"
             value="{{ form_data.title }}"
             required
-            maxlength="200"
+            maxlength="{{ title_max_length }}"
             placeholder="e.g. CS31 midterm prep"
         >
         {% if errors.title %}
@@ -38,8 +38,12 @@
         <textarea
             name="description"
             rows="4"
+            maxlength="{{ description_max_length }}"
             placeholder="What will this group work on?"
         >{{ form_data.description }}</textarea>
+        {% if errors.description %}
+            <span class="field-error">{{ errors.description }}</span>
+        {% endif %}
     </label>
 
     <label> Location
@@ -47,15 +51,20 @@
             type="text"
             name="location"
             value="{{ form_data.location }}"
+            maxlength="{{ location_max_length }}"
             placeholder="e.g. Powell Library"
         >
+        {% if errors.location %}
+            <span class="field-error">{{ errors.location }}</span>
+        {% endif %}
     </label>
 
     <label> Max members <span aria-hidden="true">*</span>
         <input
             type="number"
             name="max_members"
-            min="1"
+            min="{{ min_members }}"
+            max="{{ max_members_limit }}"
             value="{{ form_data.max_members }}"
             required
         >
