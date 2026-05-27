@@ -1,4 +1,5 @@
 from functools import wraps
+import secrets
 import sqlite3
 from flask import Flask, render_template, request, redirect, url_for, session, flash
 from werkzeug.security import generate_password_hash, check_password_hash
@@ -29,6 +30,10 @@ def user_is_group_member(conn, group_id, user_id):
         (group_id, user_id),
     ).fetchone()
     return row is not None
+
+
+def new_invite_code():
+    return secrets.token_urlsafe(6)
 
 
 def current_user():
@@ -304,6 +309,93 @@ def post_group_message(group_id):
     return redirect(url_for("group_detail", group_id=group_id))
 
 
+@app.route("/invite/<code>")
+@login_required
+def join_via_invite(code):
+    conn = get_db()
+    user_id = session["user_id"]
+
+    group = conn.execute(
+        """
+        SELECT id, max_members,
+               (SELECT COUNT(*) FROM group_members gm WHERE gm.group_id = study_groups.id) AS member_count
+        FROM study_groups
+        WHERE invite_code = ?
+        """,
+        (code,),
+    ).fetchone()
+
+    if group is None:
+        conn.close()
+        flash("That invite link is invalid or expired.")
+        return redirect(url_for("browse_groups"))
+
+    group_id = group["id"]
+    if user_is_group_member(conn, group_id, user_id):
+        conn.close()
+        flash("You are already in this group.")
+        return redirect(url_for("group_detail", group_id=group_id))
+
+    if group["member_count"] >= group["max_members"]:
+        conn.close()
+        flash("This group is full.")
+        return redirect(url_for("browse_groups"))
+
+    try:
+        conn.execute(
+            "INSERT INTO group_members (group_id, user_id, role) VALUES (?, ?, 'member')",
+            (group_id, user_id),
+        )
+        conn.execute(
+            "UPDATE study_groups SET member_count = member_count + 1 WHERE id = ?",
+            (group_id,),
+        )
+        conn.commit()
+        flash("You joined the group via invite link.")
+    except sqlite3.Error:
+        conn.rollback()
+        flash("Could not join the group. Please try again.")
+        return redirect(url_for("browse_groups"))
+    finally:
+        conn.close()
+
+    return redirect(url_for("group_detail", group_id=group_id))
+
+
+@app.route("/groups/<int:group_id>/invite", methods=["POST"])
+@login_required
+def create_group_invite(group_id):
+    conn = get_db()
+    user_id = session["user_id"]
+
+    group = conn.execute(
+        "SELECT admin_id, invite_code FROM study_groups WHERE id = ?",
+        (group_id,),
+    ).fetchone()
+    if group is None:
+        conn.close()
+        flash("That study group does not exist.")
+        return redirect(url_for("dashboard"))
+
+    if group["admin_id"] != user_id:
+        conn.close()
+        flash("Only the group admin can create invite links.")
+        return redirect(url_for("group_detail", group_id=group_id))
+
+    if not group["invite_code"]:
+        conn.execute(
+            "UPDATE study_groups SET invite_code = ? WHERE id = ?",
+            (new_invite_code(), group_id),
+        )
+        conn.commit()
+        flash("Invite link created.")
+    else:
+        flash("Invite link is already active.")
+
+    conn.close()
+    return redirect(url_for("group_detail", group_id=group_id))
+
+
 @app.route("/groups/<int:group_id>")
 @login_required
 def group_detail(group_id):
@@ -368,6 +460,10 @@ def group_detail(group_id):
         (group_id,),
     ).fetchall()
 
+    invite_url = None
+    if member["role"] == "admin" and group["invite_code"]:
+        invite_url = url_for("join_via_invite", code=group["invite_code"], _external=True)
+
     conn.close()
 
     return render_template(
@@ -377,6 +473,7 @@ def group_detail(group_id):
         members=members,
         messages=messages,
         membership=member,
+        invite_url=invite_url,
     )
 
 @app.route("/study-groups/new", methods=["GET", "POST"])
@@ -412,14 +509,16 @@ def create_study_group():
             flash("Maximum members must be at least 1.")
             return redirect(url_for("create_study_group"))
 
+        invite_code = new_invite_code()
+
         try:
             cursor = conn.execute(
                 """
                 INSERT INTO study_groups (
                     title, description, max_members, member_count, meeting_time,
-                    location, study_style, admin_id
+                    location, study_style, admin_id, invite_code
                 )
-                VALUES (?, ?, ?, ?, ?, ?, ?, ?)
+                VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?)
                 """,
                 (
                     title,
@@ -430,6 +529,7 @@ def create_study_group():
                     location,
                     study_style,
                     user_id,
+                    invite_code,
                 ),
             )
             group_id = cursor.lastrowid
