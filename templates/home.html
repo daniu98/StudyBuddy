@@ -5,9 +5,9 @@
     <p>Create an account, log in, and save your enrolled courses to your profile.</p>
 
     {% if current_user %}
-        <a class="button" href="{{ url_for('profile') }}">Go to Profile</a>
+        <a class="button" href="{{ url_for('auth.profile') }}">Go to Profile</a>
     {% else %}
-        <a class="button" href="{{ url_for('signup') }}">Get Started</a>
+        <a class="button" href="{{ url_for('auth.signup') }}">Get Started</a>
     {% endif %}
 </section>
 
