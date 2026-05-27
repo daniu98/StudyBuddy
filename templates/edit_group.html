@@ -1,0 +1,118 @@
+{% extends "base.html" %}
+{% block content %}
+<p class="breadcrumb">
+    <a href="{{ url_for('groups.dashboard') }}">Dashboard</a> /
+    <a href="{{ url_for('groups.group_detail', group_id=group.id) }}">{{ group.title }}</a> /
+    Edit Group
+</p>
+
+<h1>Edit {{ group.title }}</h1>
+<p>Update the core details for this study group.</p>
+
+{% if errors.form %}
+    <p class="form-error">{{ errors.form }}</p>
+{% endif %}
+
+<form
+    class="form study-group-form"
+    method="post"
+    action="{{ url_for('groups.edit_group', group_id=group.id) }}"
+    data-loading-form
+>
+    <label> Title
+        <span aria-hidden="true">*</span>
+        <input
+            type="text"
+            name="title"
+            value="{{ form_data.title }}"
+            required
+            maxlength="{{ title_max_length }}"
+            placeholder="e.g. CS31 midterm prep"
+        >
+        {% if errors.title %}
+            <span class="field-error">{{ errors.title }}</span>
+        {% endif %}
+    </label>
+
+    <label> Description
+        <textarea
+            name="description"
+            rows="4"
+            maxlength="{{ description_max_length }}"
+            placeholder="What will this group work on?"
+        >{{ form_data.description }}</textarea>
+        {% if errors.description %}
+            <span class="field-error">{{ errors.description }}</span>
+        {% endif %}
+    </label>
+
+    <label> Location
+        <input
+            type="text"
+            name="location"
+            value="{{ form_data.location }}"
+            maxlength="{{ location_max_length }}"
+            placeholder="e.g. Powell Library"
+        >
+        {% if errors.location %}
+            <span class="field-error">{{ errors.location }}</span>
+        {% endif %}
+    </label>
+
+    <label> Max members <span aria-hidden="true">*</span>
+        <input
+            type="number"
+            name="max_members"
+            min="{{ min_members }}"
+            max="{{ max_members_limit }}"
+            value="{{ form_data.max_members }}"
+            required
+        >
+        {% if errors.max_members %}
+            <span class="field-error">{{ errors.max_members }}</span>
+        {% endif %}
+    </label>
+
+    <label> Meeting time
+        <input
+            type="datetime-local"
+            name="meeting_time"
+            value="{{ meeting_time_value }}"
+        >
+        {% if errors.meeting_time %}
+            <span class="field-error">{{ errors.meeting_time }}</span>
+        {% endif %}
+        {% if group.meeting_time and not meeting_time_value %}
+            <small>Current saved value: {{ group.meeting_time }}</small>
+        {% endif %}
+    </label>
+
+    <label> Study style
+        <select name="study_style">
+            <option value="">Choose a style</option>
+            {% if form_data.study_style and form_data.study_style not in study_style_options %}
+                <option value="{{ form_data.study_style }}" selected>{{ form_data.study_style }}</option>
+            {% endif %}
+            {% for style in study_style_options %}
+                <option value="{{ style }}" {% if form_data.study_style == style %}selected{% endif %}>
+                    {{ style }}
+                </option>
+            {% endfor %}
+        </select>
+        {% if errors.study_style %}
+            <span class="field-error">{{ errors.study_style }}</span>
+        {% endif %}
+    </label>
+
+    <button type="submit" data-loading-button>Save changes</button>
+    <a class="button" href="{{ url_for('groups.group_detail', group_id=group.id) }}">Back to group</a>
+</form>
+
+<script>
+document.querySelector("[data-loading-form]").addEventListener("submit", function () {
+    const button = this.querySelector("[data-loading-button]");
+    button.disabled = true;
+    button.textContent = "Saving...";
+});
+</script>
+{% endblock %}

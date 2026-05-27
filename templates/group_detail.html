@@ -1,8 +1,12 @@
 {% extends "base.html" %}
 {% block content %}
-<p class="breadcrumb"><a href="{{ url_for('dashboard') }}">Dashboard</a> / {{ group.title }}</p>
+<p class="breadcrumb"><a href="{{ url_for('groups.dashboard') }}">Dashboard</a> / {{ group.title }}</p>
 
 <h1>{{ group.title }}</h1>
+
+{% if membership.role == "admin" %}
+    <p><a class="button" href="{{ url_for('groups.edit_group', group_id=group.id) }}">Edit Group</a></p>
+{% endif %}
 
 <section class="card">
     <p><strong>Admin:</strong> {{ group.admin_name }}</p>
@@ -20,22 +24,10 @@
     {% if group.description %}
         <p><strong>About:</strong> {{ group.description }}</p>
     {% endif %}
+    <form class="group-action-form" method="post" action="{{ url_for('groups.leave_group', group_id=group.id) }}">
+        <button type="submit" class="button-secondary">Leave group</button>
+    </form>
 </section>
-
-{% if membership.role == 'admin' %}
-<section class="card">
-    <h2>Invite link</h2>
-    {% if invite_url %}
-        <p>Share this link so others can join your group:</p>
-        <p><a href="{{ invite_url }}">{{ invite_url }}</a></p>
-    {% else %}
-        <p>No invite link yet.</p>
-        <form method="post" action="{{ url_for('create_group_invite', group_id=group.id) }}">
-            <button type="submit">Generate invite link</button>
-        </form>
-    {% endif %}
-</section>
-{% endif %}
 
 <h2>Members</h2>
 <ul>
@@ -68,7 +60,7 @@
     <p>No messages yet. Start the conversation below.</p>
 {% endif %}
 
-<form method="post" action="{{ url_for('post_group_message', group_id=group.id) }}">
+<form method="post" action="{{ url_for('groups.post_group_message', group_id=group.id) }}">
     <label for="body">New message</label>
     <textarea id="body" name="body" rows="3" maxlength="2000" required placeholder="Write a message to your group…"></textarea>
     <button type="submit">Send</button>

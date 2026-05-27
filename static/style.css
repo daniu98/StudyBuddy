@@ -61,6 +61,22 @@ button, .button {
     border: none;
 }
 
+button:disabled {
+    background-color: #999;
+    cursor: not-allowed;
+}
+
+.form-error,
+.field-error {
+    color: #a33;
+    font-size: 0.9em;
+}
+
+.field-error {
+    display: block;
+    margin-top: 4px;
+}
+
 .card {
     border: 1px solid gray;
     padding: 10px;
@@ -68,9 +84,26 @@ button, .button {
 }
 
 .flash {
-    background-color: yellow;
+    background-color: #fff3b0;
+    border: 1px solid #d8bd3a;
     padding: 8px;
     margin-bottom: 10px;
+}
+
+.flash p {
+    margin: 0;
+}
+
+.flash-success {
+    background-color: #dff0d8;
+    border-color: #8abf75;
+    color: #2f5f2f;
+}
+
+.flash-error {
+    background-color: #f8d7da;
+    border-color: #d99aa1;
+    color: #7a1f2b;
 }
 
 .dashboard-groups {
@@ -166,6 +199,26 @@ button, .button {
     width: 100%;
     max-width: 560px;
     box-sizing: border-box;
+}
+
+.message-hint {
+    font-size: 0.85em;
+    color: #666;
+    margin: 4px 0 10px;
+}
+
+.group-action-form {
+    margin-top: 8px;
+}
+
+.group-action-form button,
+.button-secondary {
+    background-color: #666;
+}
+
+.group-action-form button:hover,
+.button-secondary:hover {
+    background-color: #444;
 }
 
 .browse-search {
