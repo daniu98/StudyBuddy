@@ -22,6 +22,21 @@
     {% endif %}
 </section>
 
+{% if membership.role == 'admin' %}
+<section class="card">
+    <h2>Invite link</h2>
+    {% if invite_url %}
+        <p>Share this link so others can join your group:</p>
+        <p><a href="{{ invite_url }}">{{ invite_url }}</a></p>
+    {% else %}
+        <p>No invite link yet.</p>
+        <form method="post" action="{{ url_for('create_group_invite', group_id=group.id) }}">
+            <button type="submit">Generate invite link</button>
+        </form>
+    {% endif %}
+</section>
+{% endif %}
+
 <h2>Members</h2>
 <ul>
 {% for m in members %}
