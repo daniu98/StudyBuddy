@@ -520,7 +520,7 @@ def join_group(group_id):
     user_id = session["user_id"]
     try:
         group = conn.execute(
-            "SELECT max_members, member_count FROM study_groups WHERE id = ?",
+            "SELECT max_members FROM study_groups WHERE id = ?",
             (group_id,),
         ).fetchone()
         if group is None:
@@ -534,7 +534,11 @@ def join_group(group_id):
             flash("You have already joined the group.")
             return redirect(url_for("groups.group_detail", group_id=group_id))
 
-        if group["member_count"] >= group["max_members"]:
+        member_count = conn.execute(
+            "SELECT COUNT(*) AS n FROM group_members WHERE group_id = ?",
+            (group_id,),
+        ).fetchone()["n"]
+        if member_count >= group["max_members"]:
             flash("Cannot join group. The group is already full.")
             return redirect(url_for("groups.browse_groups"))
 
@@ -543,8 +547,14 @@ def join_group(group_id):
             (group_id, user_id),
         )
         conn.execute(
-            "UPDATE study_groups SET member_count = member_count + 1 WHERE id = ?",
-            (group_id,),
+            """
+            UPDATE study_groups
+            SET member_count = (
+                SELECT COUNT(*) FROM group_members WHERE group_id = ?
+            )
+            WHERE id = ?
+            """,
+            (group_id, group_id),
         )
         conn.commit()
         flash("Group joined successfully.")
@@ -575,8 +585,14 @@ def leave_group(group_id):
             (group_id, user_id),
         )
         conn.execute(
-            "UPDATE study_groups SET member_count = member_count - 1 WHERE id = ? AND member_count > 0",
-            (group_id,),
+            """
+            UPDATE study_groups
+            SET member_count = (
+                SELECT COUNT(*) FROM group_members WHERE group_id = ?
+            )
+            WHERE id = ?
+            """,
+            (group_id, group_id),
         )
         conn.commit()
         flash("Group left successfully.")
