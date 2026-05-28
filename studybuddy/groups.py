@@ -159,6 +159,8 @@ def dashboard():
         "active_group_count": 0,
         "engagement_badge": "Getting Started",
         "engagement_note": "Post your first group message this week.",
+        "best_day_name": None,
+        "best_day_count": 0,
     }
 
     message_stats = conn.execute(
@@ -192,6 +194,33 @@ def dashboard():
     if top_group is not None:
         summary["active_group_title"] = top_group["title"]
         summary["active_group_count"] = top_group["message_count"]
+
+    best_day = conn.execute(
+        """
+        SELECT strftime('%w', m.created_at) AS weekday_number, COUNT(*) AS message_count
+        FROM messages m
+        JOIN group_members gm ON gm.group_id = m.group_id
+        WHERE gm.user_id = ?
+          AND m.user_id = ?
+          AND datetime(m.created_at) >= datetime('now', '-7 days')
+        GROUP BY weekday_number
+        ORDER BY message_count DESC, weekday_number ASC
+        LIMIT 1
+        """,
+        (user_id, user_id),
+    ).fetchone()
+    if best_day is not None:
+        weekday_names = [
+            "Sunday",
+            "Monday",
+            "Tuesday",
+            "Wednesday",
+            "Thursday",
+            "Friday",
+            "Saturday",
+        ]
+        summary["best_day_name"] = weekday_names[int(best_day["weekday_number"])]
+        summary["best_day_count"] = best_day["message_count"]
 
     weekly_messages = summary["messages_last_7_days"]
     if weekly_messages >= 15:
