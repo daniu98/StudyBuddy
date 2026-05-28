@@ -151,8 +151,48 @@ def dashboard():
         """,
         (user_id,),
     ).fetchall()
+
+    summary = {
+        "group_count": len(groups),
+        "messages_last_7_days": 0,
+        "active_group_title": None,
+        "active_group_count": 0,
+    }
+
+    message_stats = conn.execute(
+        """
+        SELECT COUNT(*) AS messages_last_7_days
+        FROM messages m
+        JOIN group_members gm ON gm.group_id = m.group_id
+        WHERE gm.user_id = ?
+          AND gm.user_id = m.user_id
+          AND datetime(m.created_at) >= datetime('now', '-7 days')
+        """,
+        (user_id,),
+    ).fetchone()
+    summary["messages_last_7_days"] = message_stats["messages_last_7_days"]
+
+    top_group = conn.execute(
+        """
+        SELECT sg.title, COUNT(*) AS message_count
+        FROM messages m
+        JOIN study_groups sg ON sg.id = m.group_id
+        JOIN group_members gm ON gm.group_id = m.group_id
+        WHERE gm.user_id = ?
+          AND m.user_id = ?
+          AND datetime(m.created_at) >= datetime('now', '-7 days')
+        GROUP BY sg.id, sg.title
+        ORDER BY message_count DESC, sg.title COLLATE NOCASE
+        LIMIT 1
+        """,
+        (user_id, user_id),
+    ).fetchone()
+    if top_group is not None:
+        summary["active_group_title"] = top_group["title"]
+        summary["active_group_count"] = top_group["message_count"]
+
     conn.close()
-    return render_template("dashboard.html", groups=groups)
+    return render_template("dashboard.html", groups=groups, summary=summary)
 
 
 @bp.route("/groups/<int:group_id>/messages", methods=["POST"])
