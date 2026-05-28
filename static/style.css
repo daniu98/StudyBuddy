@@ -140,6 +140,25 @@ button:disabled {
     margin-top: 4px;
 }
 
+.dashboard-snapshot h2 {
+    margin-top: 0;
+}
+
+.dashboard-stats-grid {
+    display: grid;
+    grid-template-columns: repeat(auto-fit, minmax(220px, 1fr));
+    gap: 8px 16px;
+}
+
+.dashboard-stats-grid p {
+    margin: 0;
+}
+
+.dashboard-stat-muted {
+    color: #666;
+    font-style: italic;
+}
+
 .breadcrumb {
     font-size: 0.9em;
     margin-bottom: 8px;
