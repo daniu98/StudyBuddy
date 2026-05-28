@@ -3,6 +3,20 @@
 <h1>Your Dashboard</h1>
 <p>Study groups you have joined.</p>
 
+<section class="card dashboard-snapshot">
+    <h2>Your Activity Snapshot (Last 7 Days)</h2>
+    <div class="dashboard-stats-grid">
+        <p><strong>Joined groups:</strong> {{ summary.group_count }}</p>
+        <p><strong>Your messages sent:</strong> {{ summary.messages_last_7_days }}</p>
+        {% if summary.active_group_title %}
+            <p><strong>Most active group:</strong> {{ summary.active_group_title }}</p>
+            <p><strong>Messages in that group:</strong> {{ summary.active_group_count }}</p>
+        {% else %}
+            <p class="dashboard-stat-muted">Post a message this week to unlock your most active group.</p>
+        {% endif %}
+    </div>
+</section>
+
 {% if groups %}
     <ul class="dashboard-groups">
     {% for g in groups %}
