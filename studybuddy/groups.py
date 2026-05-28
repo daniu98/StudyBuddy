@@ -156,8 +156,90 @@ def dashboard():
         """,
         (user_id,),
     ).fetchall()
+
+    summary = {
+        "group_count": len(groups),
+        "messages_last_7_days": 0,
+        "active_group_title": None,
+        "active_group_count": 0,
+        "engagement_badge": "Getting Started",
+        "engagement_note": "Post your first group message this week.",
+        "best_day_name": None,
+        "best_day_count": 0,
+    }
+
+    message_stats = conn.execute(
+        """
+        SELECT COUNT(*) AS messages_last_7_days
+        FROM messages m
+        JOIN group_members gm ON gm.group_id = m.group_id
+        WHERE gm.user_id = ?
+          AND gm.user_id = m.user_id
+          AND datetime(m.created_at) >= datetime('now', '-7 days')
+        """,
+        (user_id,),
+    ).fetchone()
+    summary["messages_last_7_days"] = message_stats["messages_last_7_days"]
+
+    top_group = conn.execute(
+        """
+        SELECT sg.title, COUNT(*) AS message_count
+        FROM messages m
+        JOIN study_groups sg ON sg.id = m.group_id
+        JOIN group_members gm ON gm.group_id = m.group_id
+        WHERE gm.user_id = ?
+          AND m.user_id = ?
+          AND datetime(m.created_at) >= datetime('now', '-7 days')
+        GROUP BY sg.id, sg.title
+        ORDER BY message_count DESC, sg.title COLLATE NOCASE
+        LIMIT 1
+        """,
+        (user_id, user_id),
+    ).fetchone()
+    if top_group is not None:
+        summary["active_group_title"] = top_group["title"]
+        summary["active_group_count"] = top_group["message_count"]
+
+    best_day = conn.execute(
+        """
+        SELECT strftime('%w', m.created_at) AS weekday_number, COUNT(*) AS message_count
+        FROM messages m
+        JOIN group_members gm ON gm.group_id = m.group_id
+        WHERE gm.user_id = ?
+          AND m.user_id = ?
+          AND datetime(m.created_at) >= datetime('now', '-7 days')
+        GROUP BY weekday_number
+        ORDER BY message_count DESC, weekday_number ASC
+        LIMIT 1
+        """,
+        (user_id, user_id),
+    ).fetchone()
+    if best_day is not None:
+        weekday_names = [
+            "Sunday",
+            "Monday",
+            "Tuesday",
+            "Wednesday",
+            "Thursday",
+            "Friday",
+            "Saturday",
+        ]
+        summary["best_day_name"] = weekday_names[int(best_day["weekday_number"])]
+        summary["best_day_count"] = best_day["message_count"]
+
+    weekly_messages = summary["messages_last_7_days"]
+    if weekly_messages >= 15:
+        summary["engagement_badge"] = "Campus Connector"
+        summary["engagement_note"] = "You are driving group collaboration this week."
+    elif weekly_messages >= 8:
+        summary["engagement_badge"] = "Discussion Leader"
+        summary["engagement_note"] = "Great momentum. Keep your groups active."
+    elif weekly_messages >= 3:
+        summary["engagement_badge"] = "Consistent Collaborator"
+        summary["engagement_note"] = "Nice consistency. You are building study habits."
+
     conn.close()
-    return render_template("dashboard.html", groups=groups)
+    return render_template("dashboard.html", groups=groups, summary=summary)
 
 
 @bp.route("/groups/<int:group_id>/messages", methods=["POST"])
