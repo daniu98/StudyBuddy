@@ -15,6 +15,10 @@
         {% else %}
             <p class="dashboard-stat-muted">Post a message this week to unlock your most active group.</p>
         {% endif %}
+        {% if summary.best_day_name %}
+            <p><strong>Peak day:</strong> {{ summary.best_day_name }}</p>
+            <p><strong>Messages on peak day:</strong> {{ summary.best_day_count }}</p>
+        {% endif %}
         <p class="dashboard-stat-muted">{{ summary.engagement_note }}</p>
     </div>
 </section>
