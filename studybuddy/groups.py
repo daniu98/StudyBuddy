@@ -157,6 +157,8 @@ def dashboard():
         "messages_last_7_days": 0,
         "active_group_title": None,
         "active_group_count": 0,
+        "engagement_badge": "Getting Started",
+        "engagement_note": "Post your first group message this week.",
     }
 
     message_stats = conn.execute(
@@ -190,6 +192,17 @@ def dashboard():
     if top_group is not None:
         summary["active_group_title"] = top_group["title"]
         summary["active_group_count"] = top_group["message_count"]
+
+    weekly_messages = summary["messages_last_7_days"]
+    if weekly_messages >= 15:
+        summary["engagement_badge"] = "Campus Connector"
+        summary["engagement_note"] = "You are driving group collaboration this week."
+    elif weekly_messages >= 8:
+        summary["engagement_badge"] = "Discussion Leader"
+        summary["engagement_note"] = "Great momentum. Keep your groups active."
+    elif weekly_messages >= 3:
+        summary["engagement_badge"] = "Consistent Collaborator"
+        summary["engagement_note"] = "Nice consistency. You are building study habits."
 
     conn.close()
     return render_template("dashboard.html", groups=groups, summary=summary)
