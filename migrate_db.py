@@ -42,7 +42,10 @@ def main():
         )
         print("Added study_groups.member_count and backfilled counts.")
 
-    
+    cols = column_names(conn, "study_groups")
+    if "invite_code" not in cols:
+        conn.execute("ALTER TABLE study_groups ADD COLUMN invite_code TEXT")
+        print("Added study_groups.invite_code.")
 
     count = conn.execute("SELECT COUNT(*) FROM courses").fetchone()[0]
     if count == 0:
