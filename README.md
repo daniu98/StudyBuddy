@@ -10,4 +10,8 @@ pip install -r requirements.txt
 
 python init_db.py
 
+If theres studybuddy.db from an older version, run migrate instead of re-init
+
+python migrate_db.py
+
 python app.py

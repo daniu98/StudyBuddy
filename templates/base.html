@@ -3,6 +3,7 @@
 <head>
     <meta charset="utf-8">
     <title>StudyBuddy</title>
+    <link href="https://fonts.googleapis.com/css2?family=Pinyon+Script&family=IM+Fell+English:ital@0;1&display=swap" rel="stylesheet">
     <link rel="stylesheet" href="{{ url_for('static', filename='style.css') }}">
 </head>
 <body>
@@ -23,13 +24,13 @@
 </header>
 
 <main>
-    {% with messages = get_flashed_messages() %}
+    {% with messages = get_flashed_messages(with_categories=true) %}
         {% if messages %}
-            <div class="flash">
-                {% for message in messages %}
+            {% for category, message in messages %}
+                <div class="flash flash-{{ category }}">
                     <p>{{ message }}</p>
-                {% endfor %}
-            </div>
+                </div>
+            {% endfor %}
         {% endif %}
     {% endwith %}
 

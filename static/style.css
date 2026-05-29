@@ -61,6 +61,22 @@ button, .button {
     border: none;
 }
 
+button:disabled {
+    background-color: #999;
+    cursor: not-allowed;
+}
+
+.form-error,
+.field-error {
+    color: #a33;
+    font-size: 0.9em;
+}
+
+.field-error {
+    display: block;
+    margin-top: 4px;
+}
+
 .card {
     border: 1px solid gray;
     padding: 10px;
@@ -68,9 +84,26 @@ button, .button {
 }
 
 .flash {
-    background-color: yellow;
+    background-color: #fff3b0;
+    border: 1px solid #d8bd3a;
     padding: 8px;
     margin-bottom: 10px;
+}
+
+.flash p {
+    margin: 0;
+}
+
+.flash-success {
+    background-color: #dff0d8;
+    border-color: #8abf75;
+    color: #2f5f2f;
+}
+
+.flash-error {
+    background-color: #f8d7da;
+    border-color: #d99aa1;
+    color: #7a1f2b;
 }
 
 .dashboard-groups {
@@ -111,6 +144,36 @@ button, .button {
     font-size: 0.9em;
     color: #444;
     margin-top: 4px;
+}
+
+.dashboard-snapshot h2 {
+    margin-top: 0;
+}
+
+.dashboard-stats-grid {
+    display: grid;
+    grid-template-columns: repeat(auto-fit, minmax(220px, 1fr));
+    gap: 8px 16px;
+}
+
+.dashboard-stats-grid p {
+    margin: 0;
+}
+
+.dashboard-stat-muted {
+    color: #666;
+    font-style: italic;
+}
+
+.badge-pill {
+    display: inline-block;
+    background: #e7f0ff;
+    color: #1f4b8f;
+    border: 1px solid #b7cef3;
+    border-radius: 999px;
+    padding: 2px 10px;
+    font-size: 0.85em;
+    font-weight: bold;
 }
 
 .breadcrumb {
@@ -252,4 +315,71 @@ button, .button {
 
 .browse-group-card-static {
     cursor: default;
+}
+
+.landing-page {
+    text-align: center;
+}
+
+.landing-page .hero {
+    margin-bottom: 24px;
+}
+
+.landing-page .hero p {
+    max-width: 480px;
+    margin-left: auto;
+    margin-right: auto;
+}
+
+.hero-cta {
+    display: flex;
+    flex-direction: column;
+    align-items: center;
+    gap: 10px;
+    margin-top: 20px;
+}
+
+.hero-cta .button {
+    display: inline-block;
+    text-decoration: none;
+    min-width: 160px;
+    text-align: center;
+    box-sizing: border-box;
+}
+
+.hero-or {
+    color: #666;
+    font-size: 0.95em;
+}
+
+.auth-page {
+    display: flex;
+    flex-direction: column;
+    align-items: center;
+    text-align: center;
+    padding: 20px 0;
+}
+
+.auth-page h1 {
+    margin-bottom: 20px;
+}
+
+.auth-page .form {
+    width: 100%;
+    max-width: 320px;
+}
+
+.auth-page .form label {
+    text-align: left;
+}
+
+.auth-page input {
+    width: 100%;
+    max-width: none;
+    box-sizing: border-box;
+}
+
+.auth-page button {
+    width: 100%;
+    margin-top: 8px;
 }
