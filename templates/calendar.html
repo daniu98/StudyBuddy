@@ -1,0 +1,40 @@
+{% extends "base.html" %}
+{% block content %}
+<h1>Study Calendar</h1>
+<p>Your upcoming meetings from groups you have joined.</p>
+
+{% if meetings_by_date %}
+    <div class="calendar-list">
+    {% for day in meetings_by_date %}
+        <section class="calendar-day">
+            <h2>{{ day.date_label }}</h2>
+            <ul>
+            {% for meeting in day.meetings %}
+                <li class="calendar-event">
+                    <a href="{{ url_for('groups.group_detail', group_id=meeting.id) }}">
+                        <span class="calendar-event-time">{{ meeting.time_label }}</span>
+                        <span class="calendar-event-title">{{ meeting.title }}</span>
+                    </a>
+                    {% if meeting.course_codes %}
+                        <span class="calendar-event-meta">{{ meeting.course_codes }}</span>
+                    {% endif %}
+                    {% if meeting.location or meeting.study_style %}
+                        <span class="calendar-event-meta">
+                            {% if meeting.location %}{{ meeting.location }}{% endif %}
+                            {% if meeting.location and meeting.study_style %} · {% endif %}
+                            {% if meeting.study_style %}{{ meeting.study_style }}{% endif %}
+                        </span>
+                    {% endif %}
+                </li>
+            {% endfor %}
+            </ul>
+        </section>
+    {% endfor %}
+    </div>
+{% else %}
+    <section class="card">
+        <p>No upcoming meetings yet.</p>
+        <p>Add a meeting time when you create or edit a study group.</p>
+    </section>
+{% endif %}
+{% endblock %}
