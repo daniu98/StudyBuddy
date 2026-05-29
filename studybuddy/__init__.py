@@ -1,6 +1,6 @@
 from pathlib import Path
 
-from flask import Flask
+from flask import Flask, render_template
 
 from .auth import bp as auth_bp
 from .db import current_user
@@ -24,5 +24,9 @@ def create_app():
     @app.context_processor
     def inject_user():
         return {"current_user": current_user()}
+
+    @app.errorhandler(404)
+    def page_not_found(error):
+        return render_template("404error.html", error=error), 404
 
     return app

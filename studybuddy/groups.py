@@ -1,10 +1,62 @@
 import sqlite3
+from datetime import datetime
 
-from flask import Blueprint, flash, redirect, render_template, request, session, url_for
+from flask import Blueprint, abort, flash, redirect, render_template, request, session, url_for
 
 from .db import MESSAGE_MAX_LENGTH, get_db, login_required, user_is_group_member
 
 bp = Blueprint("groups", __name__)
+
+TITLE_MAX_LENGTH = 200
+DESCRIPTION_MAX_LENGTH = 1000
+LOCATION_MAX_LENGTH = 200
+MAX_MEMBERS_LIMIT = 100
+
+STUDY_STYLE_OPTIONS = [
+    "Exam prep",
+    "Problem sets",
+    "Homework review",
+    "Lecture review",
+    "Project work",
+    "General study",
+]
+
+
+def datetime_local_value(value):
+    if not value:
+        return ""
+
+    value = value.strip()
+    for fmt in ("%Y-%m-%dT%H:%M", "%Y-%m-%d %H:%M", "%Y-%m-%d %H:%M:%S"):
+        try:
+            return datetime.strptime(value, fmt).strftime("%Y-%m-%dT%H:%M")
+        except ValueError:
+            pass
+
+    return ""
+
+
+def meeting_time_storage_value(value):
+    if not value:
+        return None, None
+
+    try:
+        parsed = datetime.strptime(value, "%Y-%m-%dT%H:%M")
+    except ValueError:
+        return None, "Use the date and time picker to choose a valid meeting time."
+
+    return parsed.strftime("%Y-%m-%d %H:%M"), None
+
+
+def edit_group_form_data(group):
+    return {
+        "title": group["title"],
+        "description": group["description"] or "",
+        "location": group["location"] or "",
+        "max_members": group["max_members"],
+        "meeting_time": datetime_local_value(group["meeting_time"]),
+        "study_style": group["study_style"] or "",
+    }
 
 
 @bp.route("/groups", methods=["GET"])
@@ -104,8 +156,90 @@ def dashboard():
         """,
         (user_id,),
     ).fetchall()
+
+    summary = {
+        "group_count": len(groups),
+        "messages_last_7_days": 0,
+        "active_group_title": None,
+        "active_group_count": 0,
+        "engagement_badge": "Getting Started",
+        "engagement_note": "Post your first group message this week.",
+        "best_day_name": None,
+        "best_day_count": 0,
+    }
+
+    message_stats = conn.execute(
+        """
+        SELECT COUNT(*) AS messages_last_7_days
+        FROM messages m
+        JOIN group_members gm ON gm.group_id = m.group_id
+        WHERE gm.user_id = ?
+          AND gm.user_id = m.user_id
+          AND datetime(m.created_at) >= datetime('now', '-7 days')
+        """,
+        (user_id,),
+    ).fetchone()
+    summary["messages_last_7_days"] = message_stats["messages_last_7_days"]
+
+    top_group = conn.execute(
+        """
+        SELECT sg.title, COUNT(*) AS message_count
+        FROM messages m
+        JOIN study_groups sg ON sg.id = m.group_id
+        JOIN group_members gm ON gm.group_id = m.group_id
+        WHERE gm.user_id = ?
+          AND m.user_id = ?
+          AND datetime(m.created_at) >= datetime('now', '-7 days')
+        GROUP BY sg.id, sg.title
+        ORDER BY message_count DESC, sg.title COLLATE NOCASE
+        LIMIT 1
+        """,
+        (user_id, user_id),
+    ).fetchone()
+    if top_group is not None:
+        summary["active_group_title"] = top_group["title"]
+        summary["active_group_count"] = top_group["message_count"]
+
+    best_day = conn.execute(
+        """
+        SELECT strftime('%w', m.created_at) AS weekday_number, COUNT(*) AS message_count
+        FROM messages m
+        JOIN group_members gm ON gm.group_id = m.group_id
+        WHERE gm.user_id = ?
+          AND m.user_id = ?
+          AND datetime(m.created_at) >= datetime('now', '-7 days')
+        GROUP BY weekday_number
+        ORDER BY message_count DESC, weekday_number ASC
+        LIMIT 1
+        """,
+        (user_id, user_id),
+    ).fetchone()
+    if best_day is not None:
+        weekday_names = [
+            "Sunday",
+            "Monday",
+            "Tuesday",
+            "Wednesday",
+            "Thursday",
+            "Friday",
+            "Saturday",
+        ]
+        summary["best_day_name"] = weekday_names[int(best_day["weekday_number"])]
+        summary["best_day_count"] = best_day["message_count"]
+
+    weekly_messages = summary["messages_last_7_days"]
+    if weekly_messages >= 15:
+        summary["engagement_badge"] = "Campus Connector"
+        summary["engagement_note"] = "You are driving group collaboration this week."
+    elif weekly_messages >= 8:
+        summary["engagement_badge"] = "Discussion Leader"
+        summary["engagement_note"] = "Great momentum. Keep your groups active."
+    elif weekly_messages >= 3:
+        summary["engagement_badge"] = "Consistent Collaborator"
+        summary["engagement_note"] = "Nice consistency. You are building study habits."
+
     conn.close()
-    return render_template("dashboard.html", groups=groups)
+    return render_template("dashboard.html", groups=groups, summary=summary)
 
 
 @bp.route("/groups/<int:group_id>/messages", methods=["POST"])
@@ -129,8 +263,7 @@ def post_group_message(group_id):
     ).fetchone()
     if group is None:
         conn.close()
-        flash("That study group does not exist.")
-        return redirect(url_for("groups.dashboard"))
+        abort(404, description="That study group does not exist.")
 
     if not user_is_group_member(conn, group_id, user_id):
         conn.close()
@@ -175,8 +308,7 @@ def group_detail(group_id):
 
     if group is None:
         conn.close()
-        flash("That study group does not exist.")
-        return redirect(url_for("groups.dashboard"))
+        abort(404, description="That study group does not exist.")
 
     if member is None:
         conn.close()
@@ -225,6 +357,145 @@ def group_detail(group_id):
         members=members,
         messages=messages,
         membership=member,
+    )
+
+
+@bp.route("/groups/<int:group_id>/edit", methods=["GET", "POST"])
+@login_required
+def edit_group(group_id):
+    conn = get_db()
+    user_id = session["user_id"]
+
+    group = conn.execute(
+        """
+        SELECT sg.*, u.name AS admin_name
+        FROM study_groups sg
+        JOIN users u ON sg.admin_id = u.id
+        WHERE sg.id = ?
+        """,
+        (group_id,),
+    ).fetchone()
+
+    if group is None:
+        conn.close()
+        abort(404, description="That study group does not exist.")
+
+    membership = conn.execute(
+        """
+        SELECT role
+        FROM group_members
+        WHERE group_id = ? AND user_id = ?
+        """,
+        (group_id, user_id),
+    ).fetchone()
+
+    if membership is None or membership["role"] != "admin":
+        conn.close()
+        flash("You no longer have permission to edit this study group.", "error")
+        return redirect(url_for("groups.dashboard"))
+
+    member_count = conn.execute(
+        "SELECT COUNT(*) AS n FROM group_members WHERE group_id = ?",
+        (group_id,),
+    ).fetchone()["n"]
+    min_members = max(1, member_count)
+    max_members_limit = max(MAX_MEMBERS_LIMIT, member_count)
+
+    errors = {}
+    form_data = edit_group_form_data(group)
+
+    if request.method == "POST":
+        form_data = {
+            "title": request.form.get("title", "").strip(),
+            "description": request.form.get("description", "").strip(),
+            "location": request.form.get("location", "").strip(),
+            "max_members": request.form.get("max_members", "").strip(),
+            "meeting_time": request.form.get("meeting_time", "").strip(),
+            "study_style": request.form.get("study_style", "").strip(),
+        }
+
+        if not form_data["title"]:
+            errors["title"] = "Group title is required."
+        elif len(form_data["title"]) > TITLE_MAX_LENGTH:
+            errors["title"] = f"Group title must be {TITLE_MAX_LENGTH} characters or fewer."
+
+        if len(form_data["description"]) > DESCRIPTION_MAX_LENGTH:
+            errors["description"] = (
+                f"Description must be {DESCRIPTION_MAX_LENGTH} characters or fewer."
+            )
+
+        if len(form_data["location"]) > LOCATION_MAX_LENGTH:
+            errors["location"] = f"Location must be {LOCATION_MAX_LENGTH} characters or fewer."
+
+        try:
+            max_members = int(form_data["max_members"])
+        except ValueError:
+            errors["max_members"] = "Maximum members must be a whole number."
+            max_members = None
+
+        if max_members is not None:
+            if max_members < 1:
+                errors["max_members"] = "Maximum members must be at least 1."
+            elif max_members < member_count:
+                errors["max_members"] = (
+                    f"Maximum members cannot be less than the current {member_count} members."
+                )
+            elif max_members > max_members_limit:
+                errors["max_members"] = (
+                    f"Maximum members cannot be more than {max_members_limit}."
+                )
+
+        meeting_time, meeting_time_error = meeting_time_storage_value(form_data["meeting_time"])
+        if meeting_time_error:
+            errors["meeting_time"] = meeting_time_error
+
+        if (
+            form_data["study_style"]
+            and form_data["study_style"] not in STUDY_STYLE_OPTIONS
+        ):
+            errors["study_style"] = "Choose one of the available study styles."
+
+        if not errors:
+            try:
+                conn.execute(
+                    """
+                    UPDATE study_groups
+                    SET title = ?, description = ?, location = ?, max_members = ?,
+                        meeting_time = ?, study_style = ?
+                    WHERE id = ?
+                    """,
+                    (
+                        form_data["title"],
+                        form_data["description"] or None,
+                        form_data["location"] or None,
+                        max_members,
+                        meeting_time,
+                        form_data["study_style"] or None,
+                        group_id,
+                    ),
+                )
+                conn.commit()
+                flash("Study group updated.", "success")
+                conn.close()
+                return redirect(url_for("groups.group_detail", group_id=group_id))
+            except sqlite3.Error:
+                conn.rollback()
+                errors["form"] = "Could not update the study group. Please try again."
+
+    conn.close()
+
+    return render_template(
+        "edit_group.html",
+        group=group,
+        errors=errors,
+        form_data=form_data,
+        meeting_time_value=form_data["meeting_time"],
+        study_style_options=STUDY_STYLE_OPTIONS,
+        title_max_length=TITLE_MAX_LENGTH,
+        description_max_length=DESCRIPTION_MAX_LENGTH,
+        location_max_length=LOCATION_MAX_LENGTH,
+        max_members_limit=max_members_limit,
+        min_members=min_members,
     )
 
 
@@ -331,7 +602,7 @@ def join_group(group_id):
     user_id = session["user_id"]
     try:
         group = conn.execute(
-            "SELECT max_members, member_count FROM study_groups WHERE id = ?",
+            "SELECT max_members FROM study_groups WHERE id = ?",
             (group_id,),
         ).fetchone()
         if group is None:
@@ -345,7 +616,11 @@ def join_group(group_id):
             flash("You have already joined the group.")
             return redirect(url_for("groups.group_detail", group_id=group_id))
 
-        if group["member_count"] >= group["max_members"]:
+        member_count = conn.execute(
+            "SELECT COUNT(*) AS n FROM group_members WHERE group_id = ?",
+            (group_id,),
+        ).fetchone()["n"]
+        if member_count >= group["max_members"]:
             flash("Cannot join group. The group is already full.")
             return redirect(url_for("groups.browse_groups"))
 
@@ -354,8 +629,14 @@ def join_group(group_id):
             (group_id, user_id),
         )
         conn.execute(
-            "UPDATE study_groups SET member_count = member_count + 1 WHERE id = ?",
-            (group_id,),
+            """
+            UPDATE study_groups
+            SET member_count = (
+                SELECT COUNT(*) FROM group_members WHERE group_id = ?
+            )
+            WHERE id = ?
+            """,
+            (group_id, group_id),
         )
         conn.commit()
         flash("Group joined successfully.")
@@ -386,8 +667,14 @@ def leave_group(group_id):
             (group_id, user_id),
         )
         conn.execute(
-            "UPDATE study_groups SET member_count = member_count - 1 WHERE id = ? AND member_count > 0",
-            (group_id,),
+            """
+            UPDATE study_groups
+            SET member_count = (
+                SELECT COUNT(*) FROM group_members WHERE group_id = ?
+            )
+            WHERE id = ?
+            """,
+            (group_id, group_id),
         )
         conn.commit()
         flash("Group left successfully.")

@@ -38,6 +38,7 @@ CREATE TABLE study_groups (
     location TEXT,
     study_style TEXT,
     admin_id INTEGER NOT NULL,
+    invite_code TEXT UNIQUE,
     created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
     FOREIGN KEY (admin_id) REFERENCES users(id)
 );
