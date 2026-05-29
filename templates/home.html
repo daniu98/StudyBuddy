@@ -1,18 +1,21 @@
 {% extends "base.html" %}
 {% block content %}
-<section class="hero">
-    <h1>StudyBuddy</h1>
-    <p>Create an account, log in, and save your enrolled courses to your profile.</p>
+<div class="landing-page">
+    <section class="hero">
+        <h1>Welcome to StudyBuddy</h1>
+        <p>Create an account, log in, and save your enrolled courses to your profile.</p>
 
-    {% if current_user %}
-        <a class="button" href="{{ url_for('auth.profile') }}">Go to Profile</a>
-    {% else %}
-        <a class="button" href="{{ url_for('auth.signup') }}">Get Started</a>
-    {% endif %}
-</section>
-
-<section class="card">
-    <h2>Current Milestone</h2>
-    <p>This version focuses on authentication, profile setup, course selection, and database storage.</p>
-</section>
+        {% if current_user %}
+            <div class="hero-cta">
+                <a class="button" href="{{ url_for('auth.profile') }}">Go to Profile</a>
+            </div>
+        {% else %}
+            <div class="hero-cta">
+                <a class="button" href="{{ url_for('auth.signup') }}">Get Started</a>
+                <span class="hero-or">or</span>
+                <a class="button button-secondary" href="{{ url_for('auth.login') }}">Log in</a>
+            </div>
+        {% endif %}
+    </section>
+</div>
 {% endblock %}
