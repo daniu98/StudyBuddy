@@ -348,6 +348,38 @@ button:disabled {
 }
 
 .hero-or {
-    color: var(--color-text-muted);
+    color: #666;
     font-size: 0.95em;
+}
+
+.auth-page {
+    display: flex;
+    flex-direction: column;
+    align-items: center;
+    text-align: center;
+    padding: 20px 0;
+}
+
+.auth-page h1 {
+    margin-bottom: 20px;
+}
+
+.auth-page .form {
+    width: 100%;
+    max-width: 320px;
+}
+
+.auth-page .form label {
+    text-align: left;
+}
+
+.auth-page input {
+    width: 100%;
+    max-width: none;
+    box-sizing: border-box;
+}
+
+.auth-page button {
+    width: 100%;
+    margin-top: 8px;
 }
