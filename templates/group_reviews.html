@@ -1,0 +1,85 @@
+{% extends "base.html" %}
+{% block content %}
+<p class="breadcrumb">
+    <a href="{{ url_for('groups.browse_groups') }}">Find Groups</a> /
+    {% if is_member %}
+        <a href="{{ url_for('groups.group_detail', group_id=group.id) }}">{{ group.title }}</a> /
+    {% endif %}
+    Reviews
+</p>
+
+<h1>Reviews — {{ group.title }}</h1>
+
+{% if summary.review_count %}
+    <p class="review-summary">
+        <span class="review-stars" aria-label="{{ summary.avg_rating }} out of 5 stars">
+            {% for i in range(1, 6) %}
+                {% if i <= summary.avg_rating|round(0, 'floor')|int %}★{% else %}☆{% endif %}
+            {% endfor %}
+        </span>
+        {{ "%.1f"|format(summary.avg_rating) }} / 5
+        ({{ summary.review_count }} review{% if summary.review_count != 1 %}s{% endif %})
+    </p>
+{% else %}
+    <p class="review-summary review-summary-empty">No reviews yet.</p>
+{% endif %}
+
+{% if is_member %}
+    <section class="card review-form-section">
+        <h2>{% if user_review %}Update your review{% else %}Leave a review{% endif %}</h2>
+        <form method="post" class="form review-form">
+            <label>Rating <span aria-hidden="true">*</span>
+                <select name="rating" required>
+                    <option value="">Choose 1–5 stars</option>
+                    {% for n in range(5, 0, -1) %}
+                        <option value="{{ n }}" {% if user_review and user_review.rating == n %}selected{% endif %}>
+                            {{ n }} star{% if n != 1 %}s{% endif %}
+                        </option>
+                    {% endfor %}
+                </select>
+            </label>
+            <label>Review (optional)
+                <textarea
+                    name="body"
+                    rows="4"
+                    maxlength="{{ review_body_max_length }}"
+                    placeholder="Share what this group was like for studying…"
+                >{% if user_review and user_review.body %}{{ user_review.body }}{% endif %}</textarea>
+            </label>
+            <button type="submit">{% if user_review %}Update review{% else %}Submit review{% endif %}</button>
+        </form>
+    </section>
+{% else %}
+    <p class="review-non-member-notice">You must join this group before leaving a review.</p>
+{% endif %}
+
+<h2>All reviews</h2>
+{% if reviews %}
+    <ul class="review-list">
+    {% for r in reviews %}
+        <li class="review-item card">
+            <p class="review-item-header">
+                <strong>{{ r.author_name }}</strong>
+                <span class="review-stars" aria-label="{{ r.rating }} out of 5 stars">
+                    {% for i in range(1, 6) %}
+                        {% if i <= r.rating %}★{% else %}☆{% endif %}
+                    {% endfor %}
+                </span>
+                <span class="review-date">{{ r.created_at }}</span>
+            </p>
+            {% if r.body %}
+                <p class="review-body">{{ r.body }}</p>
+            {% endif %}
+        </li>
+    {% endfor %}
+    </ul>
+{% else %}
+    <p>No reviews have been posted yet.</p>
+{% endif %}
+
+{% if is_member %}
+    <p><a href="{{ url_for('groups.group_detail', group_id=group.id) }}">Back to group</a></p>
+{% else %}
+    <p><a href="{{ url_for('groups.browse_groups') }}">Back to search</a></p>
+{% endif %}
+{% endblock %}
