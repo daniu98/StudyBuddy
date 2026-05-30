@@ -67,6 +67,12 @@
                         <span class="browse-group-full">(full)</span>
                     {% endif %}
                 </span>
+                {% if g.review_count %}
+                    <span class="browse-group-rating">
+                        ★ {{ "%.1f"|format(g.avg_rating) }}
+                        ({{ g.review_count }} review{% if g.review_count != 1 %}s{% endif %})
+                    </span>
+                {% endif %}
                 {% if g.meeting_time or g.location %}
                     <span class="dashboard-group-meta">
                         {% if g.meeting_time %}{{ g.meeting_time }}{% endif %}
@@ -79,6 +85,11 @@
                 {% endif %}
                 {% if g.description %}
                     <span class="dashboard-group-desc">{{ g.description }}</span>
+                {% endif %}
+                {% if g.review_count %}
+                    <span class="browse-group-rating-link">
+                        <a href="{{ url_for('groups.group_reviews', group_id=g.id) }}">View reviews</a>
+                    </span>
                 {% endif %}
                 {% if g.is_member %}
                     <span class="dashboard-group-role">You are a member</span>

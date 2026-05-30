@@ -1,4 +1,5 @@
 DROP TABLE IF EXISTS messages;
+DROP TABLE IF EXISTS group_reviews;
 DROP TABLE IF EXISTS group_members;
 DROP TABLE IF EXISTS group_courses;
 DROP TABLE IF EXISTS study_groups;
@@ -67,6 +68,19 @@ CREATE TABLE messages (
     user_id INTEGER NOT NULL,
     body TEXT NOT NULL,
     created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
+    FOREIGN KEY (group_id) REFERENCES study_groups(id),
+    FOREIGN KEY (user_id) REFERENCES users(id)
+);
+
+CREATE TABLE group_reviews (
+    id INTEGER PRIMARY KEY AUTOINCREMENT,
+    group_id INTEGER NOT NULL,
+    user_id INTEGER NOT NULL,
+    rating INTEGER NOT NULL CHECK (rating >= 1 AND rating <= 5),
+    body TEXT,
+    created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
+    updated_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
+    UNIQUE (group_id, user_id),
     FOREIGN KEY (group_id) REFERENCES study_groups(id),
     FOREIGN KEY (user_id) REFERENCES users(id)
 );

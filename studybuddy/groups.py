@@ -11,6 +11,7 @@ TITLE_MAX_LENGTH = 200
 DESCRIPTION_MAX_LENGTH = 1000
 LOCATION_MAX_LENGTH = 200
 MAX_MEMBERS_LIMIT = 100
+REVIEW_BODY_MAX_LENGTH = 1000
 
 STUDY_STYLE_OPTIONS = [
     "Exam prep",
@@ -120,7 +121,17 @@ def browse_groups():
                EXISTS (
                    SELECT 1 FROM group_members gm
                    WHERE gm.group_id = sg.id AND gm.user_id = ?
-               ) AS is_member
+               ) AS is_member,
+               (
+                   SELECT ROUND(AVG(r.rating), 1)
+                   FROM group_reviews r
+                   WHERE r.group_id = sg.id
+               ) AS avg_rating,
+               (
+                   SELECT COUNT(*)
+                   FROM group_reviews r
+                   WHERE r.group_id = sg.id
+               ) AS review_count
         FROM study_groups sg
         {where_clause}
         ORDER BY sg.title COLLATE NOCASE
@@ -357,6 +368,135 @@ def group_detail(group_id):
         members=members,
         messages=messages,
         membership=member,
+    )
+
+
+@bp.route("/groups/<int:group_id>/reviews", methods=["GET", "POST"])
+@login_required
+def group_reviews(group_id):
+    conn = get_db()
+    user_id = session["user_id"]
+
+    group = conn.execute(
+        """
+        SELECT sg.id, sg.title
+        FROM study_groups sg
+        WHERE sg.id = ?
+        """,
+        (group_id,),
+    ).fetchone()
+
+    if group is None:
+        conn.close()
+        abort(404, description="That study group does not exist.")
+
+    is_member = user_is_group_member(conn, group_id, user_id)
+
+    if request.method == "POST":
+        if not is_member:
+            conn.close()
+            flash("You must join this group before leaving a review.", "error")
+            return redirect(url_for("groups.group_reviews", group_id=group_id))
+
+        raw_rating = request.form.get("rating", "").strip()
+        body = request.form.get("body", "").strip() or None
+
+        try:
+            rating = int(raw_rating)
+        except ValueError:
+            rating = None
+
+        if rating is None or rating < 1 or rating > 5:
+            conn.close()
+            flash("Please choose a rating from 1 to 5 stars.", "error")
+            return redirect(url_for("groups.group_reviews", group_id=group_id))
+
+        if body and len(body) > REVIEW_BODY_MAX_LENGTH:
+            conn.close()
+            flash(
+                f"Review text must be {REVIEW_BODY_MAX_LENGTH} characters or fewer.",
+                "error",
+            )
+            return redirect(url_for("groups.group_reviews", group_id=group_id))
+
+        existing = conn.execute(
+            """
+            SELECT id FROM group_reviews
+            WHERE group_id = ? AND user_id = ?
+            """,
+            (group_id, user_id),
+        ).fetchone()
+
+        try:
+            if existing:
+                conn.execute(
+                    """
+                    UPDATE group_reviews
+                    SET rating = ?, body = ?, updated_at = CURRENT_TIMESTAMP
+                    WHERE group_id = ? AND user_id = ?
+                    """,
+                    (rating, body, group_id, user_id),
+                )
+                flash("Your review has been updated.", "success")
+            else:
+                conn.execute(
+                    """
+                    INSERT INTO group_reviews (group_id, user_id, rating, body)
+                    VALUES (?, ?, ?, ?)
+                    """,
+                    (group_id, user_id, rating, body),
+                )
+                flash("Your review has been saved.", "success")
+            conn.commit()
+        except sqlite3.Error:
+            conn.rollback()
+            flash("Could not save your review. Please try again.", "error")
+        finally:
+            conn.close()
+
+        return redirect(url_for("groups.group_reviews", group_id=group_id))
+
+    reviews = conn.execute(
+        """
+        SELECT r.rating, r.body, r.created_at, r.updated_at, u.name AS author_name
+        FROM group_reviews r
+        JOIN users u ON u.id = r.user_id
+        WHERE r.group_id = ?
+        ORDER BY r.created_at DESC
+        """,
+        (group_id,),
+    ).fetchall()
+
+    summary = conn.execute(
+        """
+        SELECT ROUND(AVG(rating), 1) AS avg_rating, COUNT(*) AS review_count
+        FROM group_reviews
+        WHERE group_id = ?
+        """,
+        (group_id,),
+    ).fetchone()
+
+    user_review = None
+    if is_member:
+        user_review = conn.execute(
+            """
+            SELECT rating, body
+            FROM group_reviews
+            WHERE group_id = ? AND user_id = ?
+            """,
+            (group_id, user_id),
+        ).fetchone()
+
+    conn.close()
+
+    return render_template(
+        "group_reviews.html",
+        group=group,
+        reviews=reviews,
+        summary=summary,
+        is_member=is_member,
+        user_review=user_review,
+        review_body_max_length=REVIEW_BODY_MAX_LENGTH,
     )
 
 

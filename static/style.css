@@ -383,3 +383,71 @@ button:disabled {
     width: 100%;
     margin-top: 8px;
 }
+
+.review-summary {
+    font-size: 1.05em;
+    margin: 0 0 16px;
+}
+
+.review-summary-empty {
+    color: #666;
+    font-style: italic;
+}
+
+.review-stars {
+    color: #c08030;
+    letter-spacing: 0.05em;
+}
+
+.review-form-section h2 {
+    margin-top: 0;
+}
+
+.review-non-member-notice {
+    color: #7a1f2b;
+    background: #f8d7da;
+    border: 1px solid #d99aa1;
+    padding: 10px 12px;
+    margin: 0 0 20px;
+}
+
+.review-list {
+    list-style: none;
+    padding: 0;
+    margin: 0;
+}
+
+.review-item {
+    margin-bottom: 12px;
+}
+
+.review-item-header {
+    margin: 0 0 8px;
+    display: flex;
+    flex-wrap: wrap;
+    align-items: center;
+    gap: 8px;
+}
+
+.review-date {
+    font-size: 0.85em;
+    color: #666;
+}
+
+.review-body {
+    margin: 0;
+    white-space: pre-wrap;
+}
+
+.browse-group-rating {
+    display: block;
+    font-size: 0.9em;
+    color: #555;
+    margin-top: 4px;
+}
+
+.browse-group-rating-link {
+    display: block;
+    font-size: 0.9em;
+    margin-top: 4px;
+}
