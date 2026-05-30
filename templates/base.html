@@ -14,6 +14,7 @@
         {% if current_user %}
             <a href="{{ url_for('groups.create_study_group') }}">Create Group</a>
             <a href="{{ url_for('groups.dashboard') }}">Dashboard</a>
+            <a href="{{ url_for('groups.calendar') }}">Calendar</a>
             <a href="{{ url_for('auth.profile') }}">Profile</a>
             <a href="{{ url_for('auth.logout') }}">Logout</a>
         {% else %}
