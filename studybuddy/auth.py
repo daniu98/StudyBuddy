@@ -111,3 +111,45 @@ def profile():
         courses=courses,
         selected_ids=selected_ids,
     )
+
+@bp.route("/change_password", methods=["GET", "POST"])
+@login_required
+def change_password():
+    if request.method == "POST":
+        old_password = request.form.get("old_password", "")
+        new_password = request.form.get("new_password", "")
+        
+        user_id = session["user_id"]
+        conn = get_db()
+        user = conn.execute(
+            "SELECT * FROM users WHERE id = ?",
+            (user_id,),
+        ).fetchone()
+
+        if not check_password_hash(user["password_hash"], old_password):
+            flash("Incorrect password.")
+            return redirect(url_for("auth.change_password"))
+        if len(new_password) < 6:
+            flash("New password must be at least 6 characters.")
+            return redirect(url_for("auth.change_password"))
+        if new_password == old_password:
+            flash("New password cannot be identical to old password.")
+            return redirect(url_for("auth.change_password"))
+        
+        try:
+            password_hash = generate_password_hash(new_password, method="pbkdf2:sha256")
+            cursor = conn.execute(
+                "UPDATE users SET password_hash = ? WHERE id = ?",
+                (password_hash, user_id,),
+            )
+            conn.commit()
+        except sqlite3.Error:
+            conn.rollback()
+            flash("Unknown error changing password. Please try again.")
+            return redirect(url_for("auth.profile"))
+        finally:
+            conn.close()
+        flash("Password successfully changed.")
+        return redirect(url_for("auth.profile"))
+    
+    return render_template("change_password.html")
