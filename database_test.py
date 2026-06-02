@@ -73,52 +73,56 @@ def test_signup(client):
         conn.close()
 
 def test_login_logout(client):
-    testuser = client.post("/signup", data={
-        "name": "blah",
-        "email": "blah@blah",
-        "password": "Placeholder",
-    })
-    exit = client.get("/logout", follow_redirects=True)
-    assert exit.status_code == 200, "Logging out"
-    assert len(exit.history) == 1
-    assert exit.request.path == "/", "Successful logout and redirect"
-    response_blocked = client.get("/profile")
-    assert response_blocked.status_code != 200, "Login required restriction works"
-    
-    failed_response = client.post("/login", data={
-        "email": "blah@blah",
-        "password": "PL",
-    }, follow_redirects=True)
-    assert len(failed_response.history) == 1
-    assert failed_response.request.path == "/login", "Failed login and redirect"
-    assert failed_response.status_code == 200
-    
-    response = client.post("/login", data={
-        "email": "blah@blah",
-        "password": "Placeholder",
-    }, follow_redirects=True)
-    assert len(response.history) == 1
-    assert response.request.path == "/", "Successful login and redirect"
-    assert response.status_code == 200
+    with client:
+        login_placeholder(client)
+        exit = client.get(url_for("auth.logout"), follow_redirects=True)
+        assert len(exit.history) == 1
+        assert exit.request.path == url_for("main.home"), "Successful logout and redirect"
+        response_blocked = client.get(url_for("auth.profile"))
+        assert response_blocked.status_code != 200, "Login required restriction works"
+        
+        failed_login = client.post(url_for("auth.login"), data={
+            "email": "blah@blah",
+            "password": "PL",
+        }, follow_redirects=True)
+        assert len(failed_login.history) == 1
+        assert failed_login.request.path == url_for("auth.login"), "Failed login (wrong password) and redirect"
 
-    response2 = client.get("/profile")
-    assert response2.status_code == 200, "User profile accessible after login"
+        failed_login = client.post(url_for("auth.login"), data={
+            "password": "Placeholder",
+        }, follow_redirects=True)
+        assert len(failed_login.history) == 1
+        assert failed_login.request.path == url_for("auth.login"), "Failed login (no email) and redirect"
+        
+        login = client.post(url_for("auth.login"), data={
+            "email": "blah@blah",
+            "password": "Placeholder",
+        }, follow_redirects=True)
+        assert len(login.history) == 1
+        assert login.request.path == url_for("main.home"), "Successful login and redirect"
+
+        profile_access = client.get(url_for("auth.profile"))
+        assert profile_access.status_code == 200, "User profile accessible after login"
+        assert "user_id" in session, "User session successfully created"
+
+        conn = get_db()
+        clean = conn.execute(
+            "DELETE FROM users WHERE name LIKE 'blah'",
+        )
+        conn.commit()
+        conn.close()
 
 def test_profile(client):
     with client:
         login_placeholder(client)
+        to_profile = client.get(url_for("auth.profile"))
+        assert to_profile.status_code == 200
         
-        response2 = client.get("/profile")
-        assert response2.status_code == 200
-        assert "user_id" in session
-        
-        response3 = client.post("/profile", data={
+        update_courses = client.post(url_for("auth.profile"), data={
             "course_ids": ["2"],
         }, follow_redirects=True)
-        assert "user_id" in session
-        assert len(response3.history) == 1
-        assert response3.request.path == "/profile", "Successful course list update and redirect"
-        assert response3.status_code == 200
+        assert len(update_courses.history) == 1
+        assert update_courses.request.path == url_for("auth.profile"), "Successful course list update and redirect"
         
         conn = get_db()
         user = conn.execute("SELECT * FROM users WHERE email LIKE 'blah@blah'").fetchone()
@@ -141,34 +145,44 @@ def test_profile(client):
         clean = conn.execute(
             "DELETE FROM user_courses WHERE course_id == 2"
         )
+        clean = conn.execute(
+            "DELETE FROM users WHERE name LIKE 'blah'",
+        )
         conn.commit()
         conn.close()
         
     
 def test_group_create(client):
     with client:
-        response_reject = client.post("/study-groups/new", data={
+        init = client.get("/")
+        response_reject = client.post(url_for("groups.create_study_group"), data={
             "title": "LePlaceholder",
             "max_members": 8,
             "selected_course_ids": "",
         }, follow_redirects=True)
         assert len(response_reject.history) == 1
-        assert response_reject.request.path == "/login", "Accessing group creation without login"
+        assert response_reject.request.path == url_for("auth.login"), "Accessing group creation without login"
+        
         login_placeholder(client)
-        response2 = client.post("/study-groups/new", data={
+        create_group = client.post(url_for("groups.create_study_group"), data={
             "title": "LePlaceholder",
             "max_members": 8,
             "selected_course_ids": "",
         }, follow_redirects=True)
-        assert len(response2.history) == 1
-        assert response2.request.path == "/", "Successful group creation and redirect"
+        assert len(create_group.history) == 1
+        assert create_group.request.path == url_for("main.home"), "Successful group creation and redirect"
+        
         conn = get_db()
         row = conn.execute(
             "SELECT 1 FROM study_groups WHERE title LIKE 'LePlaceholder' AND member_count == 1 AND max_members == 8",
         ).fetchone()
         assert row is not None, "Verifying new group is in database with correct attributes"
+        
         clean = conn.execute(
             "DELETE FROM study_groups WHERE title LIKE 'LePlaceholder'",
+        )
+        clean = conn.execute(
+            "DELETE FROM users WHERE name LIKE 'blah'",
         )
         conn.commit()
         conn.close()
@@ -176,13 +190,13 @@ def test_group_create(client):
 def test_join_leave_group(client):
     with client:
         login_placeholder(client)
-        response = client.post("/study-groups/new", data={
+        create_group = client.post(url_for("groups.create_study_group"), data={
             "title": "LePlaceholder2",
             "max_members": 8,
             "selected_course_ids": "",
         })
-        exit = client.get("/logout")
-        response2 = client.post("/signup", data={
+        exit = client.get(url_for("auth.logout"))
+        temp_user = client.post(url_for("auth.signup"), data={
             "name": "Placeholder6",
             "email": "6newplaceholder@placeholder",
             "password": "Placeholder",
@@ -192,11 +206,11 @@ def test_join_leave_group(client):
         row = conn.execute(
             "SELECT * FROM study_groups WHERE title LIKE 'LePlaceholder2'",
         ).fetchone()
-        entry = client.post("/groups/" + str(row["id"]) + "/join", follow_redirects=True)
+        entry = client.post(url_for("groups.join_group", group_id=row["id"]), follow_redirects=True)
         assert len(entry.history) == 1
         assert entry.request.path == url_for("groups.group_detail", group_id=row["id"]), "Successful group joining"
 
-        exit = client.post("/groups/" + str(row["id"]) + "/leave", follow_redirects=True)
+        exit = client.post(url_for("groups.leave_group", group_id=row["id"]), follow_redirects=True)
         assert len(exit.history) == 1
         assert exit.request.path == url_for("groups.browse_groups"), "Successful group leaving"
 
@@ -206,13 +220,16 @@ def test_join_leave_group(client):
         clean = conn.execute(
             "DELETE FROM study_groups WHERE title LIKE 'LePlaceholder2'",
         )
+        clean = conn.execute(
+            "DELETE FROM users WHERE name LIKE 'blah'",
+        )
         conn.commit()
         conn.close()
 
 def test_edit_group(client):
     with client:
         login_placeholder(client)
-        response = client.post("/study-groups/new", data={
+        create_group = client.post(url_for("groups.create_study_group"), data={
             "title": "LePlaceholder2",
             "max_members": 8,
             "selected_course_ids": "",
@@ -221,8 +238,7 @@ def test_edit_group(client):
         row = conn.execute(
             "SELECT * FROM study_groups WHERE title LIKE 'LePlaceholder2'",
         ).fetchone()
-        response2 = client.get(url_for('groups.edit_group', group_id=row["id"]))
-        editing = client.post(url_for('groups.edit_group', group_id=row["id"]), data={
+        editing = client.post(url_for("groups.edit_group", group_id=row["id"]), data={
             "title": "LePlaceholder3",
             "description": "Suddenly, one day",
             "location": "Powell",
@@ -237,12 +253,17 @@ def test_edit_group(client):
         clean = conn.execute(
             "DELETE FROM study_groups WHERE title LIKE 'LePlaceholder3'",
         )
+        clean = conn.execute(
+            "DELETE FROM users WHERE name LIKE 'blah'",
+        )
         conn.commit()
         conn.close()
 
 
 def login_placeholder(client):
-    response = client.post("/login", data={
+    client.get("/")
+    client.post(url_for("auth.signup"), data={
+        "name": "blah",
         "email": "blah@blah",
         "password": "Placeholder",
     })
