@@ -55,6 +55,31 @@ def main():
         )
         print(f"Seeded {len(COURSE_SEED)} courses.")
 
+<<<<<<< HEAD
+=======
+    reviews_table = conn.execute(
+        "SELECT 1 FROM sqlite_master WHERE type='table' AND name='group_reviews'"
+    ).fetchone()
+    if reviews_table is None:
+        conn.execute(
+            """
+            CREATE TABLE group_reviews (
+                id INTEGER PRIMARY KEY AUTOINCREMENT,
+                group_id INTEGER NOT NULL,
+                user_id INTEGER NOT NULL,
+                rating INTEGER NOT NULL CHECK (rating >= 1 AND rating <= 5),
+                body TEXT,
+                created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
+                updated_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
+                UNIQUE (group_id, user_id),
+                FOREIGN KEY (group_id) REFERENCES study_groups(id),
+                FOREIGN KEY (user_id) REFERENCES users(id)
+            )
+            """
+        )
+        print("Created group_reviews table.")
+
+>>>>>>> origin
     conn.commit()
     conn.close()
     print("Migration complete.")

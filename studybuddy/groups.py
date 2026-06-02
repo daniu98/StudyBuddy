@@ -11,6 +11,7 @@ TITLE_MAX_LENGTH = 200
 DESCRIPTION_MAX_LENGTH = 1000
 LOCATION_MAX_LENGTH = 200
 MAX_MEMBERS_LIMIT = 100
+REVIEW_BODY_MAX_LENGTH = 1000
 
 STUDY_STYLE_OPTIONS = [
     "Exam prep",
@@ -57,6 +58,21 @@ def edit_group_form_data(group):
         "meeting_time": datetime_local_value(group["meeting_time"]),
         "study_style": group["study_style"] or "",
     }
+
+
+def parse_calendar_datetime(value):
+    try:
+        return datetime.strptime(value, "%Y-%m-%d %H:%M")
+    except (TypeError, ValueError):
+        return None
+
+
+def calendar_date_label(parsed):
+    return f"{parsed.strftime('%A, %B')} {parsed.day}, {parsed.year}"
+
+
+def calendar_time_label(parsed):
+    return parsed.strftime("%I:%M %p").lstrip("0")
 
 
 @bp.route("/groups", methods=["GET"])
@@ -120,7 +136,17 @@ def browse_groups():
                EXISTS (
                    SELECT 1 FROM group_members gm
                    WHERE gm.group_id = sg.id AND gm.user_id = ?
-               ) AS is_member
+               ) AS is_member,
+               (
+                   SELECT ROUND(AVG(r.rating), 1)
+                   FROM group_reviews r
+                   WHERE r.group_id = sg.id
+               ) AS avg_rating,
+               (
+                   SELECT COUNT(*)
+                   FROM group_reviews r
+                   WHERE r.group_id = sg.id
+               ) AS review_count
         FROM study_groups sg
         {where_clause}
         ORDER BY sg.title COLLATE NOCASE
@@ -242,6 +268,56 @@ def dashboard():
     return render_template("dashboard.html", groups=groups, summary=summary)
 
 
+@bp.route("/calendar")
+@login_required
+def calendar():
+    conn = get_db()
+    user_id = session["user_id"]
+    rows = conn.execute(
+        """
+        SELECT sg.id, sg.title, sg.meeting_time, sg.location, sg.study_style,
+               (
+                   SELECT GROUP_CONCAT(c.code, ', ')
+                   FROM group_courses gc
+                   JOIN courses c ON c.id = gc.course_id
+                   WHERE gc.group_id = sg.id
+               ) AS course_codes
+        FROM study_groups sg
+        JOIN group_members gm ON gm.group_id = sg.id
+        WHERE gm.user_id = ?
+          AND sg.meeting_time IS NOT NULL
+        ORDER BY sg.title COLLATE NOCASE
+        """,
+        (user_id,),
+    ).fetchall()
+    conn.close()
+
+    upcoming = []
+    now = datetime.now()
+    for row in rows:
+        meeting_time = parse_calendar_datetime(row["meeting_time"])
+        if meeting_time is not None and meeting_time >= now:
+            upcoming.append((meeting_time, row))
+    upcoming.sort(key=lambda item: (item[0], item[1]["title"].lower()))
+
+    meetings_by_date = []
+    for meeting_time, row in upcoming:
+        date_label = calendar_date_label(meeting_time)
+        meeting = {
+            "id": row["id"],
+            "title": row["title"],
+            "time_label": calendar_time_label(meeting_time),
+            "location": row["location"],
+            "study_style": row["study_style"],
+            "course_codes": row["course_codes"],
+        }
+        if not meetings_by_date or meetings_by_date[-1]["date_label"] != date_label:
+            meetings_by_date.append({"date_label": date_label, "meetings": []})
+        meetings_by_date[-1]["meetings"].append(meeting)
+
+    return render_template("calendar.html", meetings_by_date=meetings_by_date)
+
+
 @bp.route("/groups/<int:group_id>/messages", methods=["POST"])
 @login_required
 def post_group_message(group_id):
@@ -357,6 +433,135 @@ def group_detail(group_id):
         members=members,
         messages=messages,
         membership=member,
+    )
+
+
+@bp.route("/groups/<int:group_id>/reviews", methods=["GET", "POST"])
+@login_required
+def group_reviews(group_id):
+    conn = get_db()
+    user_id = session["user_id"]
+
+    group = conn.execute(
+        """
+        SELECT sg.id, sg.title
+        FROM study_groups sg
+        WHERE sg.id = ?
+        """,
+        (group_id,),
+    ).fetchone()
+
+    if group is None:
+        conn.close()
+        abort(404, description="That study group does not exist.")
+
+    is_member = user_is_group_member(conn, group_id, user_id)
+
+    if request.method == "POST":
+        if not is_member:
+            conn.close()
+            flash("You must join this group before leaving a review.", "error")
+            return redirect(url_for("groups.group_reviews", group_id=group_id))
+
+        raw_rating = request.form.get("rating", "").strip()
+        body = request.form.get("body", "").strip() or None
+
+        try:
+            rating = int(raw_rating)
+        except ValueError:
+            rating = None
+
+        if rating is None or rating < 1 or rating > 5:
+            conn.close()
+            flash("Please choose a rating from 1 to 5 stars.", "error")
+            return redirect(url_for("groups.group_reviews", group_id=group_id))
+
+        if body and len(body) > REVIEW_BODY_MAX_LENGTH:
+            conn.close()
+            flash(
+                f"Review text must be {REVIEW_BODY_MAX_LENGTH} characters or fewer.",
+                "error",
+            )
+            return redirect(url_for("groups.group_reviews", group_id=group_id))
+
+        existing = conn.execute(
+            """
+            SELECT id FROM group_reviews
+            WHERE group_id = ? AND user_id = ?
+            """,
+            (group_id, user_id),
+        ).fetchone()
+
+        try:
+            if existing:
+                conn.execute(
+                    """
+                    UPDATE group_reviews
+                    SET rating = ?, body = ?, updated_at = CURRENT_TIMESTAMP
+                    WHERE group_id = ? AND user_id = ?
+                    """,
+                    (rating, body, group_id, user_id),
+                )
+                flash("Your review has been updated.", "success")
+            else:
+                conn.execute(
+                    """
+                    INSERT INTO group_reviews (group_id, user_id, rating, body)
+                    VALUES (?, ?, ?, ?)
+                    """,
+                    (group_id, user_id, rating, body),
+                )
+                flash("Your review has been saved.", "success")
+            conn.commit()
+        except sqlite3.Error:
+            conn.rollback()
+            flash("Could not save your review. Please try again.", "error")
+        finally:
+            conn.close()
+
+        return redirect(url_for("groups.group_reviews", group_id=group_id))
+
+    reviews = conn.execute(
+        """
+        SELECT r.rating, r.body, r.created_at, r.updated_at, u.name AS author_name
+        FROM group_reviews r
+        JOIN users u ON u.id = r.user_id
+        WHERE r.group_id = ?
+        ORDER BY r.created_at DESC
+        """,
+        (group_id,),
+    ).fetchall()
+
+    summary = conn.execute(
+        """
+        SELECT ROUND(AVG(rating), 1) AS avg_rating, COUNT(*) AS review_count
+        FROM group_reviews
+        WHERE group_id = ?
+        """,
+        (group_id,),
+    ).fetchone()
+
+    user_review = None
+    if is_member:
+        user_review = conn.execute(
+            """
+            SELECT rating, body
+            FROM group_reviews
+            WHERE group_id = ? AND user_id = ?
+            """,
+            (group_id, user_id),
+        ).fetchone()
+
+    conn.close()
+
+    return render_template(
+        "group_reviews.html",
+        group=group,
+        reviews=reviews,
+        summary=summary,
+        is_member=is_member,
+        user_review=user_review,
+        review_body_max_length=REVIEW_BODY_MAX_LENGTH,
     )
 
 
@@ -508,7 +713,7 @@ def create_study_group():
     if request.method == "POST":
         title = request.form.get("title", "").strip()
         description = request.form.get("description", "").strip() or None
-        meeting_time = request.form.get("meeting_time", "").strip() or None
+        meeting_time_raw = request.form.get("meeting_time", "").strip()
         location = request.form.get("location", "").strip() or None
         study_style = request.form.get("study_style", "").strip() or None
         raw_max = request.form.get("max_members", "").strip()
@@ -530,6 +735,12 @@ def create_study_group():
         if max_members < 1:
             conn.close()
             flash("Maximum members must be at least 1.")
+            return redirect(url_for("groups.create_study_group"))
+
+        meeting_time, meeting_time_error = meeting_time_storage_value(meeting_time_raw)
+        if meeting_time_error:
+            conn.close()
+            flash(meeting_time_error)
             return redirect(url_for("groups.create_study_group"))
 
         try:
