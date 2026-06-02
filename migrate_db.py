@@ -55,8 +55,6 @@ def main():
         )
         print(f"Seeded {len(COURSE_SEED)} courses.")
 
-<<<<<<< HEAD
-=======
     reviews_table = conn.execute(
         "SELECT 1 FROM sqlite_master WHERE type='table' AND name='group_reviews'"
     ).fetchone()
@@ -79,7 +77,6 @@ def main():
         )
         print("Created group_reviews table.")
 
->>>>>>> origin
     conn.commit()
     conn.close()
     print("Migration complete.")

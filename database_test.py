@@ -21,25 +21,56 @@ def runner(app):
     return app.test_cli_runner()
 
 def test_signup(client):
-    response = client.post("/signup", data={
-        "name": "Placeholder5",
-        "email": "5newplaceholder@placeholder",
-        "password": "Placeholder",
-    }, follow_redirects=True)
-    assert len(response.history) == 1
-    assert response.request.path == "/profile", "Redirect on successful user creation"
-    
-    conn = get_db()
-    row = conn.execute(
-        "SELECT 1 FROM users WHERE name LIKE 'Placeholder5'",
-    ).fetchone()
-    assert row is not None, "Verify new user created successfully"
-    
-    clean = conn.execute(
-        "DELETE FROM users WHERE name LIKE 'Placeholder5'",
-    )
-    conn.commit()
-    conn.close()
+    with client:
+        init = client.get("/")
+        failed_signup = client.post(url_for("auth.signup"), data={
+            "name": "Placeholder5",
+            "email": "5newplaceholder@placeholder",
+            "password": "short",
+        }, follow_redirects=True)
+        assert len(failed_signup.history) == 1
+        assert failed_signup.request.path == url_for("auth.signup"), "Redirect on failed signup (password too short)"
+        
+        failed_signup = client.post(url_for("auth.signup"), data={
+            "email": "5newplaceholder@placeholder",
+            "password": "short",
+        }, follow_redirects=True)
+        assert len(failed_signup.history) == 1
+        assert failed_signup.request.path == url_for("auth.signup"), "Redirect on failed signup (no username)"
+        
+        failed_signup = client.post(url_for("auth.signup"), data={
+            "name": "Placeholder5",
+            "password": "short",
+        }, follow_redirects=True)
+        assert len(failed_signup.history) == 1
+        assert failed_signup.request.path == url_for("auth.signup"), "Redirect on failed signup (no email)"
+        
+        failed_signup = client.post(url_for("auth.signup"), data={
+            "name": "Placeholder5",
+            "email": "5newplaceholder@placeholder",
+        }, follow_redirects=True)
+        assert len(failed_signup.history) == 1
+        assert failed_signup.request.path == url_for("auth.signup"), "Redirect on failed signup (no password)"
+        
+        successful_signup = client.post(url_for("auth.signup"), data={
+            "name": "Placeholder5",
+            "email": "5newplaceholder@placeholder",
+            "password": "Placeholder",
+        }, follow_redirects=True)
+        assert len(successful_signup.history) == 1
+        assert successful_signup.request.path == url_for("auth.profile"), "Redirect on successful user creation"
+        
+        conn = get_db()
+        row = conn.execute(
+            "SELECT 1 FROM users WHERE name LIKE 'Placeholder5'",
+        ).fetchone()
+        assert row is not None, "Verify new user created successfully"
+        
+        clean = conn.execute(
+            "DELETE FROM users WHERE name LIKE 'Placeholder5'",
+        )
+        conn.commit()
+        conn.close()
 
 def test_login_logout(client):
     testuser = client.post("/signup", data={
@@ -153,7 +184,7 @@ def test_join_leave_group(client):
         exit = client.get("/logout")
         response2 = client.post("/signup", data={
             "name": "Placeholder6",
-            "email": "5newplaceholder@placeholder",
+            "email": "6newplaceholder@placeholder",
             "password": "Placeholder",
         })
 
