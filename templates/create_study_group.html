@@ -3,56 +3,101 @@
 <h1>Create a study group</h1>
 <p>Set up the basics so classmates know what the group is for and how to meet.</p>
 
+{% if errors.form %}
+    <p class="form-error">{{ errors.form }}</p>
+{% endif %}
+
 <form action="{{ url_for('groups.create_study_group') }}" method="post" class="form study-group-form">
     <label> Title 
         <span aria-hidden="true">*</span>
         <input
             type="text"
             name="title"
+            value="{{ form_data.title }}"
             required
-            maxlength="200"
+            maxlength="{{ title_max_length }}"
             placeholder="e.g. CS31 midterm prep"
         >
+        {% if errors.title %}
+            <span class="field-error">{{ errors.title }}</span>
+        {% endif %}
     </label>
 
     <label> Description
         <textarea
             name="description"
             rows="4"
+            maxlength="{{ description_max_length }}"
             placeholder="What will this group work on?"
-        ></textarea>
+        >{{ form_data.description }}</textarea>
+        {% if errors.description %}
+            <span class="field-error">{{ errors.description }}</span>
+        {% endif %}
     </label>
 
     <label> Max members <span aria-hidden="true">*</span>
-        <input type="number" name="max_members" min="1" value="6" required>
+        <input
+            type="number"
+            name="max_members"
+            min="1"
+            max="{{ max_members_limit }}"
+            value="{{ form_data.max_members }}"
+            required
+        >
+        {% if errors.max_members %}
+            <span class="field-error">{{ errors.max_members }}</span>
+        {% endif %}
     </label>
 
     <label> Meeting time
-        <input type="datetime-local" name="meeting_time">
+        <input
+            type="datetime-local"
+            name="meeting_time"
+            value="{{ form_data.meeting_time }}"
+        >
+        {% if errors.meeting_time %}
+            <span class="field-error">{{ errors.meeting_time }}</span>
+        {% endif %}
     </label>
 
     <label> Location
-        <input type="text" name="location" placeholder="e.g. Powell Library">
+        <input
+            type="text"
+            name="location"
+            value="{{ form_data.location }}"
+            maxlength="{{ location_max_length }}"
+            placeholder="e.g. Powell Library"
+        >
+        {% if errors.location %}
+            <span class="field-error">{{ errors.location }}</span>
+        {% endif %}
     </label>
 
     <label>
         Study style
         <select name="study_style">
             <option value="">Choose a style</option>
-            <option value="Exam prep">Exam prep</option>
-            <option value="Problem sets">Problem sets</option>
-            <option value="Homework review">Homework review</option>
-            <option value="Lecture review">Lecture review</option>
-            <option value="Project work">Project work</option>
-            <option value="General study">General study</option>
+            {% for style in study_style_options %}
+                <option value="{{ style }}" {% if form_data.study_style == style %}selected{% endif %}>
+                    {{ style }}
+                </option>
+            {% endfor %}
         </select>
+        {% if errors.study_style %}
+            <span class="field-error">{{ errors.study_style }}</span>
+        {% endif %}
     </label>
 
     <h2>Courses</h2>
     <div class="checkbox-list">
         {% for course in courses %}
             <label>
-                <input type="checkbox" name="course_ids" value="{{ course.id }}">
+                <input
+                    type="checkbox"
+                    name="course_ids"
+                    value="{{ course.id }}"
+                    {% if course.id|string in selected_course_ids %}checked{% endif %}
+                >
                 <span>{{ course.code }} - {{ course.name }}</span>
             </label>
         {% else %}
