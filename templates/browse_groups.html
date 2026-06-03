@@ -52,12 +52,8 @@
     <ul class="dashboard-groups browse-groups">
     {% for g in groups %}
         <li>
-            {% if g.is_member %}
-                <a class="dashboard-group-card" href="{{ url_for('groups.group_detail', group_id=g.id) }}">
-            {% else %}
-                <article class="dashboard-group-card browse-group-card-static">
-            {% endif %}
-                <span class="dashboard-group-title">{{ g.title }}</span>
+            <article class="dashboard-group-card browse-group-card-static">
+                <a class="dashboard-group-title" href="{{ url_for('groups.group_detail', group_id=g.id) }}">{{ g.title }}</a>
                 {% if g.course_codes %}
                     <span class="browse-group-courses">{{ g.course_codes }}</span>
                 {% endif %}
@@ -94,15 +90,11 @@
                 {% if g.is_member %}
                     <span class="dashboard-group-role">You are a member</span>
                 {% endif %}
-            {% if g.is_member %}
-                </a>
-            {% else %}
-                </article>
-                {% if g.member_count < g.max_members %}
-                    <form class="group-action-form" method="post" action="{{ url_for('groups.join_group', group_id=g.id) }}">
-                        <button type="submit">Join group</button>
-                    </form>
-                {% endif %}
+            </article>
+            {% if not g.is_member and g.member_count < g.max_members %}
+                <form class="group-action-form" method="post" action="{{ url_for('groups.join_group', group_id=g.id) }}">
+                    <button type="submit">Join group</button>
+                </form>
             {% endif %}
         </li>
     {% endfor %}

@@ -151,7 +151,7 @@ def browse_groups():
         {where_clause}
         ORDER BY sg.title COLLATE NOCASE
         """,
-        params + [user_id],
+        [user_id] + params,
     ).fetchall()
 
     courses = conn.execute("SELECT * FROM courses ORDER BY code").fetchall()
@@ -866,12 +866,13 @@ def leave_group(group_id):
     conn = get_db()
     user_id = session["user_id"]
     try:
-        if not conn.execute(
-            "SELECT 1 FROM group_members WHERE user_id = ? AND group_id = ?",
-            (user_id, group_id),
-        ).fetchone():
+        member = conn.execute("SELECT role FROM group_members WHERE user_id = ? AND group_id = ?", (user_id, group_id)).fetchone()
+        if member is None:
             flash("You are not in that group.")
             return redirect(url_for("groups.browse_groups"))
+        elif member["role"] == "admin":
+            flash("Group admins cannot leave their own group yet. Edit the group instead.")
+            return redirect(url_for("groups.group_detail", group_id=group_id))
 
         conn.execute(
             "DELETE FROM group_members WHERE group_id = ? AND user_id = ?",
