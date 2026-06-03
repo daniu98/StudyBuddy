@@ -1,3 +1,4 @@
+import secrets
 import sqlite3
 from datetime import datetime
 
@@ -21,6 +22,23 @@ STUDY_STYLE_OPTIONS = [
     "Project work",
     "General study",
 ]
+
+
+def new_invite_code():
+    return secrets.token_urlsafe(6)
+
+
+def sync_member_count(conn, group_id):
+    conn.execute(
+        """
+        UPDATE study_groups
+        SET member_count = (
+            SELECT COUNT(*) FROM group_members WHERE group_id = ?
+        )
+        WHERE id = ?
+        """,
+        (group_id, group_id),
+    )
 
 
 def datetime_local_value(value):
@@ -444,6 +462,10 @@ def group_detail(group_id):
         (group_id,),
     ).fetchall()
 
+    invite_url = None
+    if member["role"] == "admin" and group["invite_code"]:
+        invite_url = url_for("groups.join_via_invite", code=group["invite_code"], _external=True)
+
     conn.close()
 
     return render_template(
@@ -453,7 +475,95 @@ def group_detail(group_id):
         members=members,
         messages=messages,
         membership=member,
+        invite_url=invite_url,
     )
+
+
+@bp.route("/invite/<code>")
+@login_required
+def join_via_invite(code):
+    conn = get_db()
+    user_id = session["user_id"]
+
+    group = conn.execute(
+        """
+        SELECT id, max_members
+        FROM study_groups
+        WHERE invite_code = ?
+        """,
+        (code,),
+    ).fetchone()
+
+    if group is None:
+        conn.close()
+        flash("That invite link is invalid or expired.")
+        return redirect(url_for("groups.browse_groups"))
+
+    group_id = group["id"]
+    if user_is_group_member(conn, group_id, user_id):
+        conn.close()
+        flash("You are already in this group.")
+        return redirect(url_for("groups.group_detail", group_id=group_id))
+
+    member_count = conn.execute(
+        "SELECT COUNT(*) AS n FROM group_members WHERE group_id = ?",
+        (group_id,),
+    ).fetchone()["n"]
+    if member_count >= group["max_members"]:
+        conn.close()
+        flash("This group is full.")
+        return redirect(url_for("groups.browse_groups"))
+
+    try:
+        conn.execute(
+            "INSERT INTO group_members (group_id, user_id, role) VALUES (?, ?, 'member')",
+            (group_id, user_id),
+        )
+        sync_member_count(conn, group_id)
+        conn.commit()
+        flash("You joined the group via invite link.")
+    except sqlite3.Error:
+        conn.rollback()
+        flash("Could not join the group. Please try again.")
+        return redirect(url_for("groups.browse_groups"))
+    finally:
+        conn.close()
+
+    return redirect(url_for("groups.group_detail", group_id=group_id))
+
+
+@bp.route("/groups/<int:group_id>/invite", methods=["POST"])
+@login_required
+def create_group_invite(group_id):
+    conn = get_db()
+    user_id = session["user_id"]
+
+    group = conn.execute(
+        "SELECT admin_id, invite_code FROM study_groups WHERE id = ?",
+        (group_id,),
+    ).fetchone()
+    if group is None:
+        conn.close()
+        flash("That study group does not exist.")
+        return redirect(url_for("groups.dashboard"))
+
+    if group["admin_id"] != user_id:
+        conn.close()
+        flash("Only the group admin can create invite links.")
+        return redirect(url_for("groups.group_detail", group_id=group_id))
+
+    if not group["invite_code"]:
+        conn.execute(
+            "UPDATE study_groups SET invite_code = ? WHERE id = ?",
+            (new_invite_code(), group_id),
+        )
+        conn.commit()
+        flash("Invite link created.")
+    else:
+        flash("Invite link is already active.")
+
+    conn.close()
+    return redirect(url_for("groups.group_detail", group_id=group_id))
 
 
 @bp.route("/groups/<int:group_id>/reviews", methods=["GET", "POST"])
@@ -764,13 +874,14 @@ def create_study_group():
             return redirect(url_for("groups.create_study_group"))
 
         try:
+            invite_code = new_invite_code()
             cursor = conn.execute(
                 """
                 INSERT INTO study_groups (
                     title, description, max_members, member_count, meeting_time,
-                    location, study_style, admin_id
+                    location, study_style, admin_id, invite_code
                 )
-                VALUES (?, ?, ?, ?, ?, ?, ?, ?)
+                VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?)
                 """,
                 (
                     title,
@@ -781,6 +892,7 @@ def create_study_group():
                     location,
                     study_style,
                     user_id,
+                    invite_code,
                 ),
             )
             group_id = cursor.lastrowid
@@ -859,16 +971,7 @@ def join_group(group_id):
             "INSERT INTO group_members (group_id, user_id) VALUES (?, ?)",
             (group_id, user_id),
         )
-        conn.execute(
-            """
-            UPDATE study_groups
-            SET member_count = (
-                SELECT COUNT(*) FROM group_members WHERE group_id = ?
-            )
-            WHERE id = ?
-            """,
-            (group_id, group_id),
-        )
+        sync_member_count(conn, group_id)
         conn.commit()
         flash("Group joined successfully.")
         return redirect(url_for("groups.group_detail", group_id=group_id))
@@ -898,16 +1001,7 @@ def leave_group(group_id):
             "DELETE FROM group_members WHERE group_id = ? AND user_id = ?",
             (group_id, user_id),
         )
-        conn.execute(
-            """
-            UPDATE study_groups
-            SET member_count = (
-                SELECT COUNT(*) FROM group_members WHERE group_id = ?
-            )
-            WHERE id = ?
-            """,
-            (group_id, group_id),
-        )
+        sync_member_count(conn, group_id)
         conn.commit()
         flash("Group left successfully.")
         return redirect(url_for("groups.browse_groups"))

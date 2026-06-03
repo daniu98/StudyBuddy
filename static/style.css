@@ -344,6 +344,21 @@ button:disabled {
     text-decoration: underline;
 }
 
+.invite-section h2 {
+    margin-top: 0;
+}
+
+.invite-url {
+    word-break: break-all;
+    background: #f5f5f5;
+    border: 1px solid #ddd;
+    padding: 8px 10px;
+}
+
+.invite-url a {
+    color: #3366aa;
+}
+
 .calendar-list {
     margin-top: 20px;
 }

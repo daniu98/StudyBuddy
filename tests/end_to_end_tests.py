@@ -77,3 +77,29 @@ def test_group_review_flow(client):
     assert "Review Target Group" in browse_html
     assert "View reviews" in browse_html
     assert "5.0" in browse_html
+
+
+def test_join_via_invite_link(client):
+    signup_user(client, "Host", "host@example.com")
+    create_group(client, "Invite Only Group", course_ids=["1"])
+
+    conn = get_db()
+    group = conn.execute(
+        "SELECT id, invite_code FROM study_groups WHERE title = 'Invite Only Group'"
+    ).fetchone()
+    group_id = group["id"]
+    invite_code = group["invite_code"]
+    conn.close()
+    assert invite_code
+
+    detail = client.get(f"/groups/{group_id}")
+    detail_html = detail.get_data(as_text=True)
+    assert f"/invite/{invite_code}" in detail_html
+
+    client.get("/logout", follow_redirects=True)
+    signup_user(client, "Guest", "guest@example.com")
+
+    join = client.get(f"/invite/{invite_code}", follow_redirects=True)
+    assert join.status_code == 200
+    assert check_redirect(join, f"/groups/{group_id}")
+    assert "Invite Only Group" in join.get_data(as_text=True)
