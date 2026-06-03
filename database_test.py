@@ -68,6 +68,14 @@ def test_signup(client, init_db):
         }, follow_redirects=True)
         assert check_redirect(successful_signup, url_for("auth.profile")), "Redirect on successful user creation"
         
+        exit = client.get(url_for("auth.logout"))
+        failed_signup = client.post(url_for("auth.signup"), data={
+            "name": "Placeholder",
+            "email": "5newplaceholder@placeholder",
+            "password": "Placeholder2",
+        }, follow_redirects=True)
+        assert check_redirect(failed_signup, url_for("auth.signup")), "Redirect on failed signup (email already used)"
+
         conn = get_db()
         row = conn.execute(
             "SELECT 1 FROM users WHERE name LIKE 'Placeholder5'",
@@ -150,6 +158,32 @@ def test_group_create(client, init_db):
         assert check_redirect(creation_reject, url_for("auth.login")), "Accessing group creation without login"
         
         login_placeholder(client)
+        creation_reject = client.post(url_for("groups.create_study_group"), data={
+            "max_members": 8,
+            "selected_course_ids": "",
+        }, follow_redirects=True)
+        assert check_redirect(creation_reject, url_for("groups.create_study_group")), "Creating group without group name"
+
+        creation_reject = client.post(url_for("groups.create_study_group"), data={
+            "title": "LePlaceholder",
+            "selected_course_ids": "",
+        }, follow_redirects=True)
+        assert check_redirect(creation_reject, url_for("groups.create_study_group")), "Creating group without max members"
+
+        creation_reject = client.post(url_for("groups.create_study_group"), data={
+            "title": "LePlaceholder",
+            "max_members": 7.5,
+            "selected_course_ids": "",
+        }, follow_redirects=True)
+        assert check_redirect(creation_reject, url_for("groups.create_study_group")), "Creating group with non-whole max members"
+
+        creation_reject = client.post(url_for("groups.create_study_group"), data={
+            "title": "LePlaceholder",
+            "max_members": 0,
+            "selected_course_ids": "",
+        }, follow_redirects=True)
+        assert check_redirect(creation_reject, url_for("groups.create_study_group")), "Creating group with too few max members"
+
         create_group = client.post(url_for("groups.create_study_group"), data={
             "title": "LePlaceholder",
             "max_members": 8,
@@ -202,7 +236,24 @@ def test_edit_group(client, init_db):
             "max_members": 8,
             "selected_course_ids": "",
         })
+        exit = client.get(url_for("auth.logout"))
+        temp_user = client.post(url_for("auth.signup"), data={
+            "name": "Placeholder6",
+            "email": "6newplaceholder@placeholder",
+            "password": "Placeholder",
+        })
         conn = get_db()
+        row = conn.execute(
+            "SELECT * FROM study_groups WHERE title LIKE 'LePlaceholder2'",
+        ).fetchone()
+        entry = client.post(url_for("groups.join_group", group_id=row["id"]), follow_redirects=True)
+
+        exit = client.get(url_for("auth.logout"))
+        relog = client.post(url_for("auth.login"), data={
+            "email": "blah@blah",
+            "password": "Placeholder",
+        })
+
         row = conn.execute(
             "SELECT * FROM study_groups WHERE title LIKE 'LePlaceholder2'",
         ).fetchone()
@@ -214,13 +265,18 @@ def test_edit_group(client, init_db):
         })
 
         row = conn.execute(
-            "SELECT 1 FROM study_groups WHERE title LIKE 'LePlaceholder3' AND max_members = 2 AND description LIKE 'Suddenly, one day' AND location LIKE 'Powell'",
+            "SELECT * FROM study_groups WHERE title LIKE 'LePlaceholder3' AND max_members = 2 AND description LIKE 'Suddenly, one day' AND location LIKE 'Powell'",
         ).fetchone()
         assert row is not None, "Verifying edited group is in database with correct attributes"
 
-        conn.commit()
+        failed_editing = client.post(url_for("groups.edit_group", group_id=row["id"]), data={
+            "title": "LePlaceholder3",
+            "description": "Suddenly, one day",
+            "location": "Powell",
+            "max_members": 1,
+        })
+        assert len(failed_editing.history) == 0, "Editing fails for max members less than group size"
         conn.close()
-
 
 def login_placeholder(client):
     client.get("/")
