@@ -11,7 +11,6 @@ from studybuddy.db import get_db
 def cache_db():
     shutil.move("studybuddy.db", "tempdb.db")
     yield
-    shutil.move("tempdb.db", "studybuddy.db")
 
 @pytest.fixture()
 def init_db():
@@ -112,28 +111,30 @@ def test_profile(client, init_db):
         assert to_profile.status_code == 200
         
         update_courses = client.post(url_for("auth.profile"), data={
-            "course_ids": ["2"],
+            "course_ids": ["2", "3"],
         }, follow_redirects=True)
         assert check_redirect(update_courses, url_for("auth.profile")), "Successful course list update and redirect"
-        
-        conn = get_db()
-        user = conn.execute("SELECT * FROM users WHERE email LIKE 'blah@blah'").fetchone()
-        #courses2 = conn.execute(
-        #    "SELECT * FROM courses"
-        #)
-        userid:int = user["id"]
-        user_course = conn.execute(
-            "SELECT 1 FROM user_courses WHERE course_id == 2",
-        )
-        assert user_course is not None, "Verify courses updated"
-        #for x in range (1,2):
-        #    row = courses2.fetchone()
-        #    user_course = conn.execute(
-        #        "SELECT FROM user_courses WHERE user_id == ? AND course_id == ?",
-        #        user_id, row["id"],
-        #    )
-        #    assert user_course is not None, "Verify courses updated"
+        update_courses = client.post(url_for("auth.profile"), data={
+            "course_ids": ["1", "3"],
+        }, follow_redirects=True)
+        assert check_redirect(update_courses, url_for("auth.profile")), "Successful course list update and redirect"
 
+        conn = get_db()
+        user_course = conn.execute(
+            "SELECT 1 FROM user_courses WHERE course_id = 1 AND user_id = ?",
+            (session["user_id"],),
+        )
+        assert user_course is not None, "Verify course added"
+        """user_course = conn.execute(
+            "SELECT 1 FROM user_courses WHERE course_id = 2 AND user_id = ?",
+            (session["user_id"],),
+        )
+        assert user_course is None, "Verify course removed" """
+        user_course = conn.execute(
+            "SELECT 1 FROM user_courses WHERE course_id = 3 AND user_id = ?",
+            (session["user_id"],),
+        )
+        assert user_course is not None, "Verify course added"
         conn.commit()
         conn.close()
         
@@ -158,7 +159,7 @@ def test_group_create(client, init_db):
         
         conn = get_db()
         row = conn.execute(
-            "SELECT 1 FROM study_groups WHERE title LIKE 'LePlaceholder' AND member_count == 1 AND max_members == 8",
+            "SELECT 1 FROM study_groups WHERE title LIKE 'LePlaceholder' AND member_count = 1 AND max_members = 8",
         ).fetchone()
         assert row is not None, "Verifying new group is in database with correct attributes"
 
@@ -213,7 +214,7 @@ def test_edit_group(client, init_db):
         })
 
         row = conn.execute(
-            "SELECT 1 FROM study_groups WHERE title LIKE 'LePlaceholder3' AND max_members == 2 AND description LIKE 'Suddenly, one day' AND location LIKE 'Powell'",
+            "SELECT 1 FROM study_groups WHERE title LIKE 'LePlaceholder3' AND max_members = 2 AND description LIKE 'Suddenly, one day' AND location LIKE 'Powell'",
         ).fetchone()
         assert row is not None, "Verifying edited group is in database with correct attributes"
 
