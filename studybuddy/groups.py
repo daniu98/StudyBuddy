@@ -1,3 +1,4 @@
+import secrets
 import sqlite3
 from datetime import datetime
 
@@ -21,6 +22,10 @@ STUDY_STYLE_OPTIONS = [
     "Project work",
     "General study",
 ]
+
+
+def new_invite_code():
+    return secrets.token_urlsafe(6)
 
 
 def datetime_local_value(value):
@@ -47,6 +52,56 @@ def meeting_time_storage_value(value):
         return None, "Use the date and time picker to choose a valid meeting time."
 
     return parsed.strftime("%Y-%m-%d %H:%M"), None
+
+
+def validate_group_form(form_data, min_members=1, max_members_limit=MAX_MEMBERS_LIMIT):
+    errors = {}
+    max_members = None
+    meeting_time = None
+
+    if not form_data["title"]:
+        errors["title"] = "Group title is required."
+    elif len(form_data["title"]) > TITLE_MAX_LENGTH:
+        errors["title"] = f"Group title must be {TITLE_MAX_LENGTH} characters or fewer."
+
+    if len(form_data["description"]) > DESCRIPTION_MAX_LENGTH:
+        errors["description"] = (
+            f"Description must be {DESCRIPTION_MAX_LENGTH} characters or fewer."
+        )
+
+    if len(form_data["location"]) > LOCATION_MAX_LENGTH:
+        errors["location"] = f"Location must be {LOCATION_MAX_LENGTH} characters or fewer."
+
+    try:
+        max_members = int(form_data["max_members"])
+    except ValueError:
+        errors["max_members"] = "Maximum members must be a whole number."
+        max_members = None
+
+    if max_members is not None:
+        if max_members < min_members:
+            if min_members > 1:
+                errors["max_members"] = (
+                    f"Maximum members cannot be less than the current {min_members} members."
+                )
+            else:
+                errors["max_members"] = "Maximum members must be at least 1."
+        elif max_members > max_members_limit:
+            errors["max_members"] = (
+                f"Maximum members cannot be more than {max_members_limit}."
+            )
+
+    meeting_time, meeting_time_error = meeting_time_storage_value(form_data["meeting_time"])
+    if meeting_time_error:
+        errors["meeting_time"] = meeting_time_error
+
+    if (
+        form_data["study_style"]
+        and form_data["study_style"] not in STUDY_STYLE_OPTIONS
+    ):
+        errors["study_style"] = "Choose one of the available study styles."
+
+    return errors, max_members, meeting_time
 
 
 def edit_group_form_data(group):
@@ -102,10 +157,20 @@ def browse_groups():
                 OR sg.description LIKE ? COLLATE NOCASE
                 OR sg.location LIKE ? COLLATE NOCASE
                 OR sg.study_style LIKE ? COLLATE NOCASE
+                OR EXISTS (
+                    SELECT 1
+                    FROM group_courses gc
+                    JOIN courses c ON c.id = gc.course_id
+                    WHERE gc.group_id = sg.id
+                      AND (
+                          c.code LIKE ? COLLATE NOCASE
+                          OR c.name LIKE ? COLLATE NOCASE
+                      )
+                )
             )
             """
         )
-        params.extend([pattern, pattern, pattern, pattern])
+        params.extend([pattern, pattern, pattern, pattern, pattern, pattern])
 
     if course_id is not None:
         conditions.append(
@@ -122,7 +187,7 @@ def browse_groups():
     if conditions:
         where_clause = "WHERE " + " AND ".join(conditions)
 
-    groups = conn.execute(
+    group_rows = conn.execute(
         f"""
         SELECT sg.id, sg.title, sg.description, sg.meeting_time, sg.location,
                sg.study_style, sg.max_members,
@@ -133,10 +198,6 @@ def browse_groups():
                    JOIN courses c ON c.id = gc.course_id
                    WHERE gc.group_id = sg.id
                ) AS course_codes,
-               EXISTS (
-                   SELECT 1 FROM group_members gm
-                   WHERE gm.group_id = sg.id AND gm.user_id = ?
-               ) AS is_member,
                (
                    SELECT ROUND(AVG(r.rating), 1)
                    FROM group_reviews r
@@ -151,8 +212,22 @@ def browse_groups():
         {where_clause}
         ORDER BY sg.title COLLATE NOCASE
         """,
-        [user_id] + params,
+        params,
     ).fetchall()
+
+    member_group_ids = {
+        row["group_id"]
+        for row in conn.execute(
+            "SELECT group_id FROM group_members WHERE user_id = ?",
+            (user_id,),
+        ).fetchall()
+    }
+
+    groups = []
+    for row in group_rows:
+        group = dict(row)
+        group["is_member"] = row["id"] in member_group_ids
+        groups.append(group)
 
     courses = conn.execute("SELECT * FROM courses ORDER BY code").fetchall()
     conn.close()
@@ -424,6 +499,14 @@ def group_detail(group_id):
         (group_id,),
     ).fetchall()
 
+    invite_url = None
+    if member["role"] == "admin" and group["invite_code"]:
+        invite_url = url_for(
+            "groups.join_via_invite",
+            code=group["invite_code"],
+            _external=True,
+        )
+
     conn.close()
 
     return render_template(
@@ -433,6 +516,7 @@ def group_detail(group_id):
         members=members,
         messages=messages,
         membership=member,
+        invite_url=invite_url,
     )
 
 
@@ -619,46 +703,11 @@ def edit_group(group_id):
             "study_style": request.form.get("study_style", "").strip(),
         }
 
-        if not form_data["title"]:
-            errors["title"] = "Group title is required."
-        elif len(form_data["title"]) > TITLE_MAX_LENGTH:
-            errors["title"] = f"Group title must be {TITLE_MAX_LENGTH} characters or fewer."
-
-        if len(form_data["description"]) > DESCRIPTION_MAX_LENGTH:
-            errors["description"] = (
-                f"Description must be {DESCRIPTION_MAX_LENGTH} characters or fewer."
-            )
-
-        if len(form_data["location"]) > LOCATION_MAX_LENGTH:
-            errors["location"] = f"Location must be {LOCATION_MAX_LENGTH} characters or fewer."
-
-        try:
-            max_members = int(form_data["max_members"])
-        except ValueError:
-            errors["max_members"] = "Maximum members must be a whole number."
-            max_members = None
-
-        if max_members is not None:
-            if max_members < 1:
-                errors["max_members"] = "Maximum members must be at least 1."
-            elif max_members < member_count:
-                errors["max_members"] = (
-                    f"Maximum members cannot be less than the current {member_count} members."
-                )
-            elif max_members > max_members_limit:
-                errors["max_members"] = (
-                    f"Maximum members cannot be more than {max_members_limit}."
-                )
-
-        meeting_time, meeting_time_error = meeting_time_storage_value(form_data["meeting_time"])
-        if meeting_time_error:
-            errors["meeting_time"] = meeting_time_error
-
-        if (
-            form_data["study_style"]
-            and form_data["study_style"] not in STUDY_STYLE_OPTIONS
-        ):
-            errors["study_style"] = "Choose one of the available study styles."
+        errors, max_members, meeting_time = validate_group_form(
+            form_data,
+            min_members=min_members,
+            max_members_limit=max_members_limit,
+        )
 
         if not errors:
             try:
@@ -709,101 +758,197 @@ def edit_group(group_id):
 def create_study_group():
     user_id = session["user_id"]
     conn = get_db()
+    courses = conn.execute("SELECT * FROM courses ORDER BY code").fetchall()
+
+    errors = {}
+    form_data = {
+        "title": "",
+        "description": "",
+        "location": "",
+        "max_members": "6",
+        "meeting_time": "",
+        "study_style": "",
+    }
+    selected_course_ids = []
 
     if request.method == "POST":
-        title = request.form.get("title", "").strip()
-        description = request.form.get("description", "").strip() or None
-        meeting_time_raw = request.form.get("meeting_time", "").strip()
-        location = request.form.get("location", "").strip() or None
-        study_style = request.form.get("study_style", "").strip() or None
-        raw_max = request.form.get("max_members", "").strip()
-        member_count = 1
+        form_data = {
+            "title": request.form.get("title", "").strip(),
+            "description": request.form.get("description", "").strip(),
+            "location": request.form.get("location", "").strip(),
+            "max_members": request.form.get("max_members", "").strip(),
+            "meeting_time": request.form.get("meeting_time", "").strip(),
+            "study_style": request.form.get("study_style", "").strip(),
+        }
         selected_course_ids = request.form.getlist("course_ids")
 
-        if not title:
-            conn.close()
-            flash("Group title is required.")
-            return redirect(url_for("groups.create_study_group"))
+        errors, max_members, meeting_time = validate_group_form(form_data)
 
-        try:
-            max_members = int(raw_max)
-        except ValueError:
-            conn.close()
-            flash("Maximum members must be a whole number.")
-            return redirect(url_for("groups.create_study_group"))
-
-        if max_members < 1:
-            conn.close()
-            flash("Maximum members must be at least 1.")
-            return redirect(url_for("groups.create_study_group"))
-
-        meeting_time, meeting_time_error = meeting_time_storage_value(meeting_time_raw)
-        if meeting_time_error:
-            conn.close()
-            flash(meeting_time_error)
-            return redirect(url_for("groups.create_study_group"))
-
-        try:
-            cursor = conn.execute(
-                """
-                INSERT INTO study_groups (
-                    title, description, max_members, member_count, meeting_time,
-                    location, study_style, admin_id
-                )
-                VALUES (?, ?, ?, ?, ?, ?, ?, ?)
-                """,
-                (
-                    title,
-                    description,
-                    max_members,
-                    member_count,
-                    meeting_time,
-                    location,
-                    study_style,
-                    user_id,
-                ),
-            )
-            group_id = cursor.lastrowid
-
-            conn.execute(
-                """
-                INSERT INTO group_members (group_id, user_id, role)
-                VALUES (?, ?, 'admin')
-                """,
-                (group_id, user_id),
-            )
-
-            for course_id in selected_course_ids:
-                try:
-                    cid = int(course_id)
-                except ValueError:
-                    continue
-                exists = conn.execute(
-                    "SELECT 1 FROM courses WHERE id = ?",
-                    (cid,),
-                ).fetchone()
-                if exists:
-                    conn.execute(
-                        """
-                        INSERT INTO group_courses (group_id, course_id)
-                        VALUES (?, ?)
-                        """,
-                        (group_id, cid),
+        if not errors:
+            invite_code = new_invite_code()
+            try:
+                cursor = conn.execute(
+                    """
+                    INSERT INTO study_groups (
+                        title, description, max_members, member_count, meeting_time,
+                        location, study_style, admin_id, invite_code
                     )
+                    VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?)
+                    """,
+                    (
+                        form_data["title"],
+                        form_data["description"] or None,
+                        max_members,
+                        1,
+                        meeting_time,
+                        form_data["location"] or None,
+                        form_data["study_style"] or None,
+                        user_id,
+                        invite_code,
+                    ),
+                )
+                group_id = cursor.lastrowid
 
-            conn.commit()
-            flash("Study group created. You are the group admin.")
-            return redirect(url_for("main.home"))
-        except sqlite3.Error:
-            conn.rollback()
-            flash("Could not create the study group. Please try again.")
-            return redirect(url_for("groups.create_study_group"))
-        finally:
-            conn.close()
+                conn.execute(
+                    """
+                    INSERT INTO group_members (group_id, user_id, role)
+                    VALUES (?, ?, 'admin')
+                    """,
+                    (group_id, user_id),
+                )
 
-    courses = conn.execute("SELECT * FROM courses ORDER BY code").fetchall()
+                for course_id in selected_course_ids:
+                    try:
+                        cid = int(course_id)
+                    except ValueError:
+                        continue
+                    exists = conn.execute(
+                        "SELECT 1 FROM courses WHERE id = ?",
+                        (cid,),
+                    ).fetchone()
+                    if exists:
+                        conn.execute(
+                            """
+                            INSERT INTO group_courses (group_id, course_id)
+                            VALUES (?, ?)
+                            """,
+                            (group_id, cid),
+                        )
+
+                conn.commit()
+                conn.close()
+                flash("Study group created. You are the group admin.")
+                return redirect(url_for("main.home"))
+            except sqlite3.Error:
+                conn.rollback()
+                errors["form"] = "Could not create the study group. Please try again."
+
     conn.close()
-    return render_template("create_study_group.html", courses=courses)
+    return render_template(
+        "create_study_group.html",
+        courses=courses,
+        errors=errors,
+        form_data=form_data,
+        selected_course_ids=selected_course_ids,
+        study_style_options=STUDY_STYLE_OPTIONS,
+        title_max_length=TITLE_MAX_LENGTH,
+        description_max_length=DESCRIPTION_MAX_LENGTH,
+        location_max_length=LOCATION_MAX_LENGTH,
+        max_members_limit=MAX_MEMBERS_LIMIT,
+    )
+
+
+@bp.route("/invite/<code>")
+@login_required
+def join_via_invite(code):
+    conn = get_db()
+    user_id = session["user_id"]
+
+    group = conn.execute(
+        """
+        SELECT id, max_members,
+               (SELECT COUNT(*) FROM group_members gm WHERE gm.group_id = study_groups.id) AS member_count
+        FROM study_groups
+        WHERE invite_code = ?
+        """,
+        (code,),
+    ).fetchone()
+
+    if group is None:
+        conn.close()
+        flash("That invite link is invalid or expired.")
+        return redirect(url_for("groups.browse_groups"))
+
+    group_id = group["id"]
+    if user_is_group_member(conn, group_id, user_id):
+        conn.close()
+        flash("You are already in this group.")
+        return redirect(url_for("groups.group_detail", group_id=group_id))
+
+    if group["member_count"] >= group["max_members"]:
+        conn.close()
+        flash("This group is full.")
+        return redirect(url_for("groups.browse_groups"))
+
+    try:
+        conn.execute(
+            "INSERT INTO group_members (group_id, user_id, role) VALUES (?, ?, 'member')",
+            (group_id, user_id),
+        )
+        conn.execute(
+            """
+            UPDATE study_groups
+            SET member_count = (
+                SELECT COUNT(*) FROM group_members WHERE group_id = ?
+            )
+            WHERE id = ?
+            """,
+            (group_id, group_id),
+        )
+        conn.commit()
+        flash("You joined the group via invite link.")
+    except sqlite3.Error:
+        conn.rollback()
+        flash("Could not join the group. Please try again.")
+        return redirect(url_for("groups.browse_groups"))
+    finally:
+        conn.close()
+
+    return redirect(url_for("groups.group_detail", group_id=group_id))
+
+
+@bp.route("/groups/<int:group_id>/invite", methods=["POST"])
+@login_required
+def create_group_invite(group_id):
+    conn = get_db()
+    user_id = session["user_id"]
+
+    group = conn.execute(
+        "SELECT admin_id, invite_code FROM study_groups WHERE id = ?",
+        (group_id,),
+    ).fetchone()
+    if group is None:
+        conn.close()
+        flash("That study group does not exist.")
+        return redirect(url_for("groups.dashboard"))
+
+    if group["admin_id"] != user_id:
+        conn.close()
+        flash("Only the group admin can create invite links.")
+        return redirect(url_for("groups.group_detail", group_id=group_id))
+
+    if not group["invite_code"]:
+        conn.execute(
+            "UPDATE study_groups SET invite_code = ? WHERE id = ?",
+            (new_invite_code(), group_id),
+        )
+        conn.commit()
+        flash("Invite link created.")
+    else:
+        flash("Invite link is already active.")
+
+    conn.close()
+    return redirect(url_for("groups.group_detail", group_id=group_id))
 
 
 @bp.route("/groups/<int:group_id>/join", methods=["POST"])

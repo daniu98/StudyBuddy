@@ -7,6 +7,11 @@ from .db import current_user
 from .groups import bp as groups_bp
 from .main import bp as main_bp
 
+try:
+    from migrate_db import main as run_migrations
+except ImportError:
+    run_migrations = None
+
 
 def create_app():
     project_root = Path(__file__).resolve().parent.parent
@@ -16,6 +21,9 @@ def create_app():
         static_folder=str(project_root / "static"),
     )
     app.config["SECRET_KEY"] = "dev-secret-key-change-this"
+
+    if run_migrations is not None:
+        run_migrations()
 
     app.register_blueprint(main_bp)
     app.register_blueprint(auth_bp)

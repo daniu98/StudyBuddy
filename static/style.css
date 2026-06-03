@@ -317,6 +317,33 @@ button:disabled {
     cursor: default;
 }
 
+.browse-group-title-link {
+    text-decoration: none;
+    color: #1f4b8f;
+}
+
+.browse-group-title-link:hover {
+    text-decoration: underline;
+}
+
+.browse-group-reviews {
+    display: flex;
+    flex-wrap: wrap;
+    align-items: center;
+    gap: 8px;
+    margin-top: 4px;
+}
+
+.browse-group-reviews-link {
+    font-size: 0.9em;
+    color: #3366aa;
+    text-decoration: none;
+}
+
+.browse-group-reviews-link:hover {
+    text-decoration: underline;
+}
+
 .calendar-list {
     margin-top: 20px;
 }
@@ -495,10 +522,9 @@ button:disabled {
 }
 
 .browse-group-rating {
-    display: block;
+    display: inline-block;
     font-size: 0.9em;
     color: #555;
-    margin-top: 4px;
 }
 
 .browse-group-rating-link {
