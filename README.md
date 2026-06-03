@@ -1,214 +1,170 @@
 # StudyBuddy
 
-StudyBuddy is a Flask web app for finding study groups, joining them, messaging members, leaving reviews, and tracking personal study activity on a dashboard.
+StudyBuddy helps students create and join study groups, message group members, leave reviews, and track activity from a personal dashboard.
 
-## Requirements
+## Quick start
 
-- Python 3.9 or newer
-- `pip`
-- A terminal
+From the project root (the folder with `app.py`):
 
-## Project structure
-
-```text
-StuddyBuddy/
-├── app.py                 # Local entry point (starts the dev server)
-├── init_db.py             # Creates a fresh SQLite database from schema.sql
-├── migrate_db.py          # Applies schema updates to an existing database
-├── schema.sql             # Database schema and seed course data
-├── requirements.txt       # Python dependencies
-├── studybuddy/            # Application package (routes, auth, groups, DB helpers)
-├── templates/             # HTML templates
-├── static/                # CSS and static assets
-└── tests/                 # Automated tests
-    ├── conftest.py        # Shared pytest fixtures
-    ├── helpers.py         # Shared test helper functions
-    ├── database_test.py   # Unit/integration tests for core features
-    └── end_to_end_tests.py # Multi-step user flow tests
+```bash
+python3 -m venv venv
+source venv/bin/activate          # Windows: venv\Scripts\activate
+pip install -r requirements.txt
+python init_db.py
+python app.py
 ```
 
-## 1. Clone and open the project
+Open [http://127.0.0.1:5001](http://127.0.0.1:5001) in your browser.
+
+Press `Ctrl+C` in the terminal to stop the server.
+
+> **Note:** Inside an activated virtual environment, `python` and `pip` usually work too. On macOS, use `python3` if `python` is not installed.
+
+## What you need
+
+- Python 3.9+
+- Git (to clone the repo)
+
+## First-time setup
+
+### 1. Get the code
 
 ```bash
 git clone https://github.com/daniu98/StudyBuddy.git
 cd StudyBuddy
 ```
 
-If you already have the repo locally, make sure you are in the project root (the folder that contains `app.py`).
+### 2. Virtual environment
 
-## 2. Create and activate a virtual environment
-
-### macOS / Linux
+**macOS / Linux**
 
 ```bash
 python3 -m venv venv
 source venv/bin/activate
 ```
 
-### Windows (Command Prompt)
+**Windows (Command Prompt)**
 
 ```bat
 python -m venv venv
 venv\Scripts\activate
 ```
 
-### Windows (PowerShell)
+**Windows (PowerShell)**
 
 ```powershell
 python -m venv venv
 venv\Scripts\Activate.ps1
 ```
 
-When the environment is active, your shell prompt usually shows `(venv)`.
+Your prompt should show `(venv)` when the environment is active.
 
-## 3. Install dependencies
+### 3. Install packages
 
 ```bash
 pip install -r requirements.txt
 ```
 
-This installs Flask and pytest.
+### 4. Database
 
-## 4. Set up the database
-
-Run **one** of the following from the project root.
-
-### Fresh setup (recommended for first run)
-
-Creates `studybuddy.db` from `schema.sql` and seeds default courses:
+**First run** — creates `studybuddy.db` and loads sample courses:
 
 ```bash
 python init_db.py
 ```
 
-Expected output:
+You should see: `Database initialized: studybuddy.db`
 
-```text
-Database initialized: studybuddy.db
-```
-
-### Existing database (upgrade without wiping data)
-
-If you already have an older `studybuddy.db`, run:
+**Already have a database?** Update it without wiping your data:
 
 ```bash
 python migrate_db.py
 ```
 
-This adds missing tables/columns (for example `group_reviews`, `member_count`, and `invite_code`) without deleting existing users or groups.
+The app also runs migrations automatically when it starts. The database file stays on your machine and is not committed to git.
 
-Notes:
-
-- The app also runs `migrate_db.py` automatically on startup.
-- `studybuddy.db` is local-only and is ignored by git.
-
-## 5. Run the app locally
-
-From the project root:
+## Run the app
 
 ```bash
 python app.py
 ```
 
-You should see Flask start in debug mode on port **5001**.
+The dev server runs at **http://127.0.0.1:5001**.
 
-Open the app in your browser:
+Try this flow:
 
-```text
-http://127.0.0.1:5001
-```
+1. Sign up for an account
+2. Add courses on your Profile
+3. Create a study group
+4. Browse or search groups on Find Groups
+5. Open Dashboard to see groups you joined
 
-### Stop the server
+## Run tests
 
-Press `Ctrl+C` in the terminal where the app is running.
-
-## 6. Basic local workflow
-
-1. Open `http://127.0.0.1:5001`
-2. Click **Sign Up** and create an account
-3. Save courses on your **Profile**
-4. Use **Create Group** to make a study group
-5. Use **Find Groups** to browse/search/join groups
-6. Open **Dashboard** to see joined groups and activity snapshot
-
-## 7. Run tests
-
-Run all tests from the project root:
+From the project root:
 
 ```bash
 pytest tests/ -v
 ```
 
-Run only database/unit tests:
+Or:
 
 ```bash
-pytest tests/database_test.py -v
+python3 -m pytest tests/ -v
 ```
 
-Run only end-to-end flow tests:
+- `tests/database_test.py` — signup, login, profile, group create/join/leave/edit
+- `tests/end_to_end_tests.py` — full flows (course search, messaging, reviews, dashboard)
 
-```bash
-pytest tests/end_to_end_tests.py -v
+Tests back up your local `studybuddy.db` to `tempdb.db` while they run, then restore it.
+
+## Project layout
+
+```text
+StudyBuddy/
+├── app.py              # Start the app from here
+├── init_db.py          # Fresh database
+├── migrate_db.py       # Upgrade existing database
+├── schema.sql          # Tables and seed courses
+├── studybuddy/         # App code (routes, auth, groups)
+├── templates/          # HTML pages
+├── static/             # CSS
+└── tests/              # pytest tests
 ```
-
-### What the test suites cover
-
-- `tests/database_test.py`
-  - Signup validation and account creation
-  - Login/logout and protected routes
-  - Profile course updates
-  - Group create/join/leave/edit behavior
-
-- `tests/end_to_end_tests.py`
-  - Create group + find by course filter
-  - Join group + search membership state + post message + dashboard activity
-  - Submit group review and verify browse page review display
-
-### Test database behavior
-
-The test suite temporarily moves your local `studybuddy.db` to `tempdb.db` while tests run, then restores it when tests finish. Each test uses a fresh database created by `init_db.py`.
 
 ## Troubleshooting
 
-### `ModuleNotFoundError: No module named 'flask'`
+**`ModuleNotFoundError: No module named 'flask'`**
 
-Your virtual environment is not active or dependencies are not installed.
+Activate the virtual environment and install dependencies again:
 
 ```bash
-source venv/bin/activate   # macOS/Linux
+source venv/bin/activate
 pip install -r requirements.txt
 ```
 
-### `Address already in use` on port 5001
+**Port 5001 already in use**
 
-Another process is already using port 5001. Stop that process, or change the port in `app.py`.
+Stop the other process, or change the port in `app.py`.
 
-### Browse page errors after pulling new code
-
-Run migrations:
+**Errors after pulling new code**
 
 ```bash
 python migrate_db.py
 ```
 
-If your local database is corrupted/outdated and you do not need existing data:
+To reset completely (deletes local data):
 
 ```bash
 rm studybuddy.db
 python init_db.py
 ```
 
-### Tests fail immediately with database errors
+**Tests fail with database errors**
 
-Make sure you are running pytest from the project root (where `init_db.py` and `schema.sql` live):
+Run pytest from the project root, not from inside `tests/`:
 
 ```bash
 cd /path/to/StudyBuddy
 pytest tests/ -v
 ```
-
-## Development notes
-
-- Default dev secret key is set in `studybuddy/__init__.py` (`dev-secret-key-change-this`).
-- Debug mode is enabled in `app.py` for local development only.
-- Production deployment should use a production WSGI server and a secure secret key.
