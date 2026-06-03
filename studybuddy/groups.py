@@ -102,10 +102,20 @@ def browse_groups():
                 OR sg.description LIKE ? COLLATE NOCASE
                 OR sg.location LIKE ? COLLATE NOCASE
                 OR sg.study_style LIKE ? COLLATE NOCASE
+                OR EXISTS (
+                    SELECT 1
+                    FROM group_courses gc
+                    JOIN courses c ON c.id = gc.course_id
+                    WHERE gc.group_id = sg.id
+                      AND (
+                          c.code LIKE ? COLLATE NOCASE
+                          OR c.name LIKE ? COLLATE NOCASE
+                      )
+                )
             )
             """
         )
-        params.extend([pattern, pattern, pattern, pattern])
+        params.extend([pattern, pattern, pattern, pattern, pattern, pattern])
 
     if course_id is not None:
         conditions.append(
@@ -122,7 +132,7 @@ def browse_groups():
     if conditions:
         where_clause = "WHERE " + " AND ".join(conditions)
 
-    groups = conn.execute(
+    group_rows = conn.execute(
         f"""
         SELECT sg.id, sg.title, sg.description, sg.meeting_time, sg.location,
                sg.study_style, sg.max_members,
@@ -133,10 +143,6 @@ def browse_groups():
                    JOIN courses c ON c.id = gc.course_id
                    WHERE gc.group_id = sg.id
                ) AS course_codes,
-               EXISTS (
-                   SELECT 1 FROM group_members gm
-                   WHERE gm.group_id = sg.id AND gm.user_id = ?
-               ) AS is_member,
                (
                    SELECT ROUND(AVG(r.rating), 1)
                    FROM group_reviews r
@@ -151,8 +157,22 @@ def browse_groups():
         {where_clause}
         ORDER BY sg.title COLLATE NOCASE
         """,
-        [user_id] + params,
+        params,
     ).fetchall()
+
+    member_group_ids = {
+        row["group_id"]
+        for row in conn.execute(
+            "SELECT group_id FROM group_members WHERE user_id = ?",
+            (user_id,),
+        ).fetchall()
+    }
+
+    groups = []
+    for row in group_rows:
+        group = dict(row)
+        group["is_member"] = row["id"] in member_group_ids
+        groups.append(group)
 
     courses = conn.execute("SELECT * FROM courses ORDER BY code").fetchall()
     conn.close()
