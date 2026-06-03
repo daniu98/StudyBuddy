@@ -1,8 +1,22 @@
 import pytest
+import shutil
 from flask import Blueprint, flash, redirect, render_template, request, session, url_for
 from werkzeug.security import check_password_hash, generate_password_hash
 from studybuddy import create_app
 from studybuddy.db import get_db
+
+# temporarily move current database until testing complete
+# since new database needs to be created for each test to ensure independence
+@pytest.fixture(scope="session", autouse=True)
+def cache_db():
+    shutil.move("studybuddy.db", "tempdb.db")
+    yield
+    shutil.move("tempdb.db", "studybuddy.db")
+
+@pytest.fixture()
+def init_db():
+    with open("init_db.py") as file:
+        exec(file.read())
 
 @pytest.fixture()
 def app():
@@ -20,7 +34,8 @@ def client(app):
 def runner(app):
     return app.test_cli_runner()
 
-def test_signup(client):
+
+def test_signup(client, init_db):
     with client:
         init = client.get("/")
         failed_signup = client.post(url_for("auth.signup"), data={
@@ -65,14 +80,9 @@ def test_signup(client):
             "SELECT 1 FROM users WHERE name LIKE 'Placeholder5'",
         ).fetchone()
         assert row is not None, "Verify new user created successfully"
-        
-        clean = conn.execute(
-            "DELETE FROM users WHERE name LIKE 'Placeholder5'",
-        )
-        conn.commit()
         conn.close()
 
-def test_login_logout(client):
+def test_login_logout(client, init_db):
     with client:
         login_placeholder(client)
         exit = client.get(url_for("auth.logout"), follow_redirects=True)
@@ -105,14 +115,7 @@ def test_login_logout(client):
         assert profile_access.status_code == 200, "User profile accessible after login"
         assert "user_id" in session, "User session successfully created"
 
-        conn = get_db()
-        clean = conn.execute(
-            "DELETE FROM users WHERE name LIKE 'blah'",
-        )
-        conn.commit()
-        conn.close()
-
-def test_profile(client):
+def test_profile(client, init_db):
     with client:
         login_placeholder(client)
         to_profile = client.get(url_for("auth.profile"))
@@ -141,18 +144,12 @@ def test_profile(client):
         #        user_id, row["id"],
         #    )
         #    assert user_course is not None, "Verify courses updated"
-        
-        clean = conn.execute(
-            "DELETE FROM user_courses WHERE course_id == 2"
-        )
-        clean = conn.execute(
-            "DELETE FROM users WHERE name LIKE 'blah'",
-        )
+
         conn.commit()
         conn.close()
         
     
-def test_group_create(client):
+def test_group_create(client, init_db):
     with client:
         init = client.get("/")
         response_reject = client.post(url_for("groups.create_study_group"), data={
@@ -177,17 +174,11 @@ def test_group_create(client):
             "SELECT 1 FROM study_groups WHERE title LIKE 'LePlaceholder' AND member_count == 1 AND max_members == 8",
         ).fetchone()
         assert row is not None, "Verifying new group is in database with correct attributes"
-        
-        clean = conn.execute(
-            "DELETE FROM study_groups WHERE title LIKE 'LePlaceholder'",
-        )
-        clean = conn.execute(
-            "DELETE FROM users WHERE name LIKE 'blah'",
-        )
+
         conn.commit()
         conn.close()
 
-def test_join_leave_group(client):
+def test_join_leave_group(client, init_db):
     with client:
         login_placeholder(client)
         create_group = client.post(url_for("groups.create_study_group"), data={
@@ -214,19 +205,10 @@ def test_join_leave_group(client):
         assert len(exit.history) == 1
         assert exit.request.path == url_for("groups.browse_groups"), "Successful group leaving"
 
-        clean = conn.execute(
-            "DELETE FROM users WHERE name LIKE 'Placeholder6'",
-        )
-        clean = conn.execute(
-            "DELETE FROM study_groups WHERE title LIKE 'LePlaceholder2'",
-        )
-        clean = conn.execute(
-            "DELETE FROM users WHERE name LIKE 'blah'",
-        )
         conn.commit()
         conn.close()
 
-def test_edit_group(client):
+def test_edit_group(client, init_db):
     with client:
         login_placeholder(client)
         create_group = client.post(url_for("groups.create_study_group"), data={
@@ -250,12 +232,6 @@ def test_edit_group(client):
         ).fetchone()
         assert row is not None, "Verifying edited group is in database with correct attributes"
 
-        clean = conn.execute(
-            "DELETE FROM study_groups WHERE title LIKE 'LePlaceholder3'",
-        )
-        clean = conn.execute(
-            "DELETE FROM users WHERE name LIKE 'blah'",
-        )
         conn.commit()
         conn.close()
 
@@ -267,7 +243,6 @@ def login_placeholder(client):
         "email": "blah@blah",
         "password": "Placeholder",
     })
-
 
 if __name__ == "__main__":
     pytest.main([__file__, "-v"])
