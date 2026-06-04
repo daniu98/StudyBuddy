@@ -1,16 +1,12 @@
 from functools import wraps
-import sqlite3
 
 from flask import flash, redirect, session, url_for
 
-DATABASE = "studybuddy.db"
+from .db_connection import DATABASE, get_db
+from .repositories import study_groups as groups_repo
+from .repositories import users as users_repo
+
 MESSAGE_MAX_LENGTH = 2000
-
-
-def get_db():
-    conn = sqlite3.connect(DATABASE)
-    conn.row_factory = sqlite3.Row
-    return conn
 
 
 def login_required(view):
@@ -25,11 +21,7 @@ def login_required(view):
 
 
 def user_is_group_member(conn, group_id, user_id):
-    row = conn.execute(
-        "SELECT 1 FROM group_members WHERE group_id = ? AND user_id = ?",
-        (group_id, user_id),
-    ).fetchone()
-    return row is not None
+    return groups_repo.is_member(conn, group_id, user_id)
 
 
 def current_user():
@@ -37,9 +29,7 @@ def current_user():
         return None
 
     conn = get_db()
-    user = conn.execute(
-        "SELECT * FROM users WHERE id = ?",
-        (session["user_id"],),
-    ).fetchone()
-    conn.close()
-    return user
+    try:
+        return users_repo.find_by_id(conn, session["user_id"])
+    finally:
+        conn.close()
