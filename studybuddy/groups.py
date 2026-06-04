@@ -4,7 +4,11 @@ from datetime import datetime
 
 from flask import Blueprint, abort, flash, redirect, render_template, request, session, url_for
 
-from .db import MESSAGE_MAX_LENGTH, get_db, login_required, user_is_group_member
+from .db import MESSAGE_MAX_LENGTH, get_db, login_required
+from .repositories import courses as courses_repo
+from .repositories import messages as messages_repo
+from .repositories import reviews as reviews_repo
+from .repositories import study_groups as groups_repo
 
 bp = Blueprint("groups", __name__)
 
@@ -130,6 +134,57 @@ def calendar_time_label(parsed):
     return parsed.strftime("%I:%M %p").lstrip("0")
 
 
+WEEKDAY_NAMES = [
+    "Sunday",
+    "Monday",
+    "Tuesday",
+    "Wednesday",
+    "Thursday",
+    "Friday",
+    "Saturday",
+]
+
+
+def build_activity_summary(conn, user_id, joined_group_count):
+    summary = {
+        "group_count": joined_group_count,
+        "messages_last_7_days": 0,
+        "active_group_title": None,
+        "active_group_count": 0,
+        "engagement_badge": "Getting Started",
+        "engagement_note": "Post your first group message this week.",
+        "best_day_name": None,
+        "best_day_count": 0,
+    }
+
+    summary["messages_last_7_days"] = messages_repo.count_last_7_days_for_user(
+        conn, user_id
+    )
+
+    top_group = messages_repo.top_group_last_7_days(conn, user_id)
+    if top_group is not None:
+        summary["active_group_title"] = top_group["title"]
+        summary["active_group_count"] = top_group["message_count"]
+
+    best_day = messages_repo.best_day_last_7_days(conn, user_id)
+    if best_day is not None:
+        summary["best_day_name"] = WEEKDAY_NAMES[int(best_day["weekday_number"])]
+        summary["best_day_count"] = best_day["message_count"]
+
+    weekly_messages = summary["messages_last_7_days"]
+    if weekly_messages >= 15:
+        summary["engagement_badge"] = "Campus Connector"
+        summary["engagement_note"] = "You are driving group collaboration this week."
+    elif weekly_messages >= 8:
+        summary["engagement_badge"] = "Discussion Leader"
+        summary["engagement_note"] = "Great momentum. Keep your groups active."
+    elif weekly_messages >= 3:
+        summary["engagement_badge"] = "Consistent Collaborator"
+        summary["engagement_note"] = "Nice consistency. You are building study habits."
+
+    return summary
+
+
 @bp.route("/groups", methods=["GET"])
 @login_required
 def browse_groups():
@@ -143,94 +198,20 @@ def browse_groups():
             course_id = None
 
     conn = get_db()
-    user_id = session["user_id"]
+    try:
+        user_id = session["user_id"]
+        group_rows = groups_repo.search(conn, q=q or None, course_id=course_id)
+        member_group_ids = groups_repo.member_group_ids(conn, user_id)
 
-    conditions = []
-    params = []
+        groups = []
+        for row in group_rows:
+            group = dict(row)
+            group["is_member"] = row["id"] in member_group_ids
+            groups.append(group)
 
-    if q:
-        pattern = f"%{q}%"
-        conditions.append(
-            """
-            (
-                sg.title LIKE ? COLLATE NOCASE
-                OR sg.description LIKE ? COLLATE NOCASE
-                OR sg.location LIKE ? COLLATE NOCASE
-                OR sg.study_style LIKE ? COLLATE NOCASE
-                OR EXISTS (
-                    SELECT 1
-                    FROM group_courses gc
-                    JOIN courses c ON c.id = gc.course_id
-                    WHERE gc.group_id = sg.id
-                      AND (
-                          c.code LIKE ? COLLATE NOCASE
-                          OR c.name LIKE ? COLLATE NOCASE
-                      )
-                )
-            )
-            """
-        )
-        params.extend([pattern, pattern, pattern, pattern, pattern, pattern])
-
-    if course_id is not None:
-        conditions.append(
-            """
-            EXISTS (
-                SELECT 1 FROM group_courses gc
-                WHERE gc.group_id = sg.id AND gc.course_id = ?
-            )
-            """
-        )
-        params.append(course_id)
-
-    where_clause = ""
-    if conditions:
-        where_clause = "WHERE " + " AND ".join(conditions)
-
-    group_rows = conn.execute(
-        f"""
-        SELECT sg.id, sg.title, sg.description, sg.meeting_time, sg.location,
-               sg.study_style, sg.max_members,
-               (SELECT COUNT(*) FROM group_members gm WHERE gm.group_id = sg.id) AS member_count,
-               (
-                   SELECT GROUP_CONCAT(c.code, ', ')
-                   FROM group_courses gc
-                   JOIN courses c ON c.id = gc.course_id
-                   WHERE gc.group_id = sg.id
-               ) AS course_codes,
-               (
-                   SELECT ROUND(AVG(r.rating), 1)
-                   FROM group_reviews r
-                   WHERE r.group_id = sg.id
-               ) AS avg_rating,
-               (
-                   SELECT COUNT(*)
-                   FROM group_reviews r
-                   WHERE r.group_id = sg.id
-               ) AS review_count
-        FROM study_groups sg
-        {where_clause}
-        ORDER BY sg.title COLLATE NOCASE
-        """,
-        params,
-    ).fetchall()
-
-    member_group_ids = {
-        row["group_id"]
-        for row in conn.execute(
-            "SELECT group_id FROM group_members WHERE user_id = ?",
-            (user_id,),
-        ).fetchall()
-    }
-
-    groups = []
-    for row in group_rows:
-        group = dict(row)
-        group["is_member"] = row["id"] in member_group_ids
-        groups.append(group)
-
-    courses = conn.execute("SELECT * FROM courses ORDER BY code").fetchall()
-    conn.close()
+        courses = courses_repo.list_all(conn)
+    finally:
+        conn.close()
 
     return render_template(
         "browse_groups.html",
@@ -245,101 +226,12 @@ def browse_groups():
 @login_required
 def dashboard():
     conn = get_db()
-    user_id = session["user_id"]
-    groups = conn.execute(
-        """
-        SELECT sg.id, sg.title, sg.description, sg.meeting_time, sg.location,
-               gm.role, gm.joined_at
-        FROM study_groups sg
-        INNER JOIN group_members gm ON sg.id = gm.group_id
-        WHERE gm.user_id = ?
-        ORDER BY sg.title COLLATE NOCASE
-        """,
-        (user_id,),
-    ).fetchall()
-
-    summary = {
-        "group_count": len(groups),
-        "messages_last_7_days": 0,
-        "active_group_title": None,
-        "active_group_count": 0,
-        "engagement_badge": "Getting Started",
-        "engagement_note": "Post your first group message this week.",
-        "best_day_name": None,
-        "best_day_count": 0,
-    }
-
-    message_stats = conn.execute(
-        """
-        SELECT COUNT(*) AS messages_last_7_days
-        FROM messages m
-        JOIN group_members gm ON gm.group_id = m.group_id
-        WHERE gm.user_id = ?
-          AND gm.user_id = m.user_id
-          AND datetime(m.created_at) >= datetime('now', '-7 days')
-        """,
-        (user_id,),
-    ).fetchone()
-    summary["messages_last_7_days"] = message_stats["messages_last_7_days"]
-
-    top_group = conn.execute(
-        """
-        SELECT sg.title, COUNT(*) AS message_count
-        FROM messages m
-        JOIN study_groups sg ON sg.id = m.group_id
-        JOIN group_members gm ON gm.group_id = m.group_id
-        WHERE gm.user_id = ?
-          AND m.user_id = ?
-          AND datetime(m.created_at) >= datetime('now', '-7 days')
-        GROUP BY sg.id, sg.title
-        ORDER BY message_count DESC, sg.title COLLATE NOCASE
-        LIMIT 1
-        """,
-        (user_id, user_id),
-    ).fetchone()
-    if top_group is not None:
-        summary["active_group_title"] = top_group["title"]
-        summary["active_group_count"] = top_group["message_count"]
-
-    best_day = conn.execute(
-        """
-        SELECT strftime('%w', m.created_at) AS weekday_number, COUNT(*) AS message_count
-        FROM messages m
-        JOIN group_members gm ON gm.group_id = m.group_id
-        WHERE gm.user_id = ?
-          AND m.user_id = ?
-          AND datetime(m.created_at) >= datetime('now', '-7 days')
-        GROUP BY weekday_number
-        ORDER BY message_count DESC, weekday_number ASC
-        LIMIT 1
-        """,
-        (user_id, user_id),
-    ).fetchone()
-    if best_day is not None:
-        weekday_names = [
-            "Sunday",
-            "Monday",
-            "Tuesday",
-            "Wednesday",
-            "Thursday",
-            "Friday",
-            "Saturday",
-        ]
-        summary["best_day_name"] = weekday_names[int(best_day["weekday_number"])]
-        summary["best_day_count"] = best_day["message_count"]
-
-    weekly_messages = summary["messages_last_7_days"]
-    if weekly_messages >= 15:
-        summary["engagement_badge"] = "Campus Connector"
-        summary["engagement_note"] = "You are driving group collaboration this week."
-    elif weekly_messages >= 8:
-        summary["engagement_badge"] = "Discussion Leader"
-        summary["engagement_note"] = "Great momentum. Keep your groups active."
-    elif weekly_messages >= 3:
-        summary["engagement_badge"] = "Consistent Collaborator"
-        summary["engagement_note"] = "Nice consistency. You are building study habits."
-
-    conn.close()
+    try:
+        user_id = session["user_id"]
+        groups = groups_repo.list_for_user_dashboard(conn, user_id)
+        summary = build_activity_summary(conn, user_id, len(groups))
+    finally:
+        conn.close()
     return render_template("dashboard.html", groups=groups, summary=summary)
 
 
@@ -347,25 +239,10 @@ def dashboard():
 @login_required
 def calendar():
     conn = get_db()
-    user_id = session["user_id"]
-    rows = conn.execute(
-        """
-        SELECT sg.id, sg.title, sg.meeting_time, sg.location, sg.study_style,
-               (
-                   SELECT GROUP_CONCAT(c.code, ', ')
-                   FROM group_courses gc
-                   JOIN courses c ON c.id = gc.course_id
-                   WHERE gc.group_id = sg.id
-               ) AS course_codes
-        FROM study_groups sg
-        JOIN group_members gm ON gm.group_id = sg.id
-        WHERE gm.user_id = ?
-          AND sg.meeting_time IS NOT NULL
-        ORDER BY sg.title COLLATE NOCASE
-        """,
-        (user_id,),
-    ).fetchall()
-    conn.close()
+    try:
+        rows = groups_repo.calendar_meetings(conn, session["user_id"])
+    finally:
+        conn.close()
 
     upcoming = []
     now = datetime.now()
@@ -406,26 +283,17 @@ def post_group_message(group_id):
         return redirect(url_for("groups.group_detail", group_id=group_id))
 
     conn = get_db()
-    user_id = session["user_id"]
-
-    group = conn.execute(
-        "SELECT id FROM study_groups WHERE id = ?",
-        (group_id,),
-    ).fetchone()
-    if group is None:
-        conn.close()
-        abort(404, description="That study group does not exist.")
-
-    if not user_is_group_member(conn, group_id, user_id):
-        conn.close()
-        flash("Only group members can post messages.")
-        return redirect(url_for("groups.dashboard"))
-
     try:
-        conn.execute(
-            "INSERT INTO messages (group_id, user_id, body) VALUES (?, ?, ?)",
-            (group_id, user_id, body),
-        )
+        user_id = session["user_id"]
+
+        if not groups_repo.exists(conn, group_id):
+            abort(404, description="That study group does not exist.")
+
+        if not groups_repo.is_member(conn, group_id, user_id):
+            flash("Only group members can post messages.")
+            return redirect(url_for("groups.dashboard"))
+
+        messages_repo.insert(conn, group_id, user_id, body)
         conn.commit()
     except sqlite3.Error:
         conn.rollback()
@@ -440,74 +308,31 @@ def post_group_message(group_id):
 @login_required
 def group_detail(group_id):
     conn = get_db()
-    user_id = session["user_id"]
+    try:
+        user_id = session["user_id"]
+        member = groups_repo.membership(conn, group_id, user_id)
+        group = groups_repo.find_with_admin(conn, group_id)
 
-    member = conn.execute(
-        "SELECT role, joined_at FROM group_members WHERE group_id = ? AND user_id = ?",
-        (group_id, user_id),
-    ).fetchone()
+        if group is None:
+            abort(404, description="That study group does not exist.")
 
-    group = conn.execute(
-        """
-        SELECT sg.*, u.name AS admin_name
-        FROM study_groups sg
-        JOIN users u ON sg.admin_id = u.id
-        WHERE sg.id = ?
-        """,
-        (group_id,),
-    ).fetchone()
+        if member is None:
+            flash("You can only open groups you belong to.")
+            return redirect(url_for("groups.dashboard"))
 
-    if group is None:
+        courses = groups_repo.list_courses(conn, group_id)
+        members = groups_repo.list_members(conn, group_id)
+        messages = messages_repo.list_for_group(conn, group_id)
+
+        invite_url = None
+        if member["role"] == "admin" and group["invite_code"]:
+            invite_url = url_for(
+                "groups.join_via_invite",
+                code=group["invite_code"],
+                _external=True,
+            )
+    finally:
         conn.close()
-        abort(404, description="That study group does not exist.")
-
-    if member is None:
-        conn.close()
-        flash("You can only open groups you belong to.")
-        return redirect(url_for("groups.dashboard"))
-
-    courses = conn.execute(
-        """
-        SELECT c.code, c.name
-        FROM courses c
-        JOIN group_courses gc ON c.id = gc.course_id
-        WHERE gc.group_id = ?
-        ORDER BY c.code
-        """,
-        (group_id,),
-    ).fetchall()
-
-    members = conn.execute(
-        """
-        SELECT u.name, gm.role, gm.joined_at
-        FROM group_members gm
-        JOIN users u ON gm.user_id = u.id
-        WHERE gm.group_id = ?
-        ORDER BY gm.role DESC, u.name COLLATE NOCASE
-        """,
-        (group_id,),
-    ).fetchall()
-
-    messages = conn.execute(
-        """
-        SELECT m.body, m.created_at, u.name AS author_name
-        FROM messages m
-        JOIN users u ON m.user_id = u.id
-        WHERE m.group_id = ?
-        ORDER BY m.created_at DESC
-        """,
-        (group_id,),
-    ).fetchall()
-
-    invite_url = None
-    if member["role"] == "admin" and group["invite_code"]:
-        invite_url = url_for(
-            "groups.join_via_invite",
-            code=group["invite_code"],
-            _external=True,
-        )
-
-    conn.close()
 
     return render_template(
         "group_detail.html",
@@ -524,119 +349,63 @@ def group_detail(group_id):
 @login_required
 def group_reviews(group_id):
     conn = get_db()
-    user_id = session["user_id"]
+    try:
+        user_id = session["user_id"]
+        group = groups_repo.find_for_reviews_page(conn, group_id)
 
-    group = conn.execute(
-        """
-        SELECT sg.id, sg.title
-        FROM study_groups sg
-        WHERE sg.id = ?
-        """,
-        (group_id,),
-    ).fetchone()
+        if group is None:
+            abort(404, description="That study group does not exist.")
 
-    if group is None:
+        is_member = groups_repo.is_member(conn, group_id, user_id)
+
+        if request.method == "POST":
+            if not is_member:
+                flash("You must join this group before leaving a review.", "error")
+                return redirect(url_for("groups.group_reviews", group_id=group_id))
+
+            raw_rating = request.form.get("rating", "").strip()
+            body = request.form.get("body", "").strip() or None
+
+            try:
+                rating = int(raw_rating)
+            except ValueError:
+                rating = None
+
+            if rating is None or rating < 1 or rating > 5:
+                flash("Please choose a rating from 1 to 5 stars.", "error")
+                return redirect(url_for("groups.group_reviews", group_id=group_id))
+
+            if body and len(body) > REVIEW_BODY_MAX_LENGTH:
+                flash(
+                    f"Review text must be {REVIEW_BODY_MAX_LENGTH} characters or fewer.",
+                    "error",
+                )
+                return redirect(url_for("groups.group_reviews", group_id=group_id))
+
+            existing = reviews_repo.find_user_review(conn, group_id, user_id)
+            try:
+                if existing:
+                    reviews_repo.update(conn, group_id, user_id, rating, body)
+                    flash("Your review has been updated.", "success")
+                else:
+                    reviews_repo.insert(conn, group_id, user_id, rating, body)
+                    flash("Your review has been saved.", "success")
+                conn.commit()
+            except sqlite3.Error:
+                conn.rollback()
+                flash("Could not save your review. Please try again.", "error")
+
+            return redirect(url_for("groups.group_reviews", group_id=group_id))
+
+        reviews = reviews_repo.list_for_group(conn, group_id)
+        summary = reviews_repo.summary_for_group(conn, group_id)
+        user_review = (
+            reviews_repo.user_review_body(conn, group_id, user_id)
+            if is_member
+            else None
+        )
+    finally:
         conn.close()
-        abort(404, description="That study group does not exist.")
-
-    is_member = user_is_group_member(conn, group_id, user_id)
-
-    if request.method == "POST":
-        if not is_member:
-            conn.close()
-            flash("You must join this group before leaving a review.", "error")
-            return redirect(url_for("groups.group_reviews", group_id=group_id))
-
-        raw_rating = request.form.get("rating", "").strip()
-        body = request.form.get("body", "").strip() or None
-
-        try:
-            rating = int(raw_rating)
-        except ValueError:
-            rating = None
-
-        if rating is None or rating < 1 or rating > 5:
-            conn.close()
-            flash("Please choose a rating from 1 to 5 stars.", "error")
-            return redirect(url_for("groups.group_reviews", group_id=group_id))
-
-        if body and len(body) > REVIEW_BODY_MAX_LENGTH:
-            conn.close()
-            flash(
-                f"Review text must be {REVIEW_BODY_MAX_LENGTH} characters or fewer.",
-                "error",
-            )
-            return redirect(url_for("groups.group_reviews", group_id=group_id))
-
-        existing = conn.execute(
-            """
-            SELECT id FROM group_reviews
-            WHERE group_id = ? AND user_id = ?
-            """,
-            (group_id, user_id),
-        ).fetchone()
-
-        try:
-            if existing:
-                conn.execute(
-                    """
-                    UPDATE group_reviews
-                    SET rating = ?, body = ?, updated_at = CURRENT_TIMESTAMP
-                    WHERE group_id = ? AND user_id = ?
-                    """,
-                    (rating, body, group_id, user_id),
-                )
-                flash("Your review has been updated.", "success")
-            else:
-                conn.execute(
-                    """
-                    INSERT INTO group_reviews (group_id, user_id, rating, body)
-                    VALUES (?, ?, ?, ?)
-                    """,
-                    (group_id, user_id, rating, body),
-                )
-                flash("Your review has been saved.", "success")
-            conn.commit()
-        except sqlite3.Error:
-            conn.rollback()
-            flash("Could not save your review. Please try again.", "error")
-        finally:
-            conn.close()
-
-        return redirect(url_for("groups.group_reviews", group_id=group_id))
-
-    reviews = conn.execute(
-        """
-        SELECT r.rating, r.body, r.created_at, r.updated_at, u.name AS author_name
-        FROM group_reviews r
-        JOIN users u ON u.id = r.user_id
-        WHERE r.group_id = ?
-        ORDER BY r.created_at DESC
-        """,
-        (group_id,),
-    ).fetchall()
-
-    summary = conn.execute(
-        """
-        SELECT ROUND(AVG(rating), 1) AS avg_rating, COUNT(*) AS review_count
-        FROM group_reviews
-        WHERE group_id = ?
-        """,
-        (group_id,),
-    ).fetchone()
-
-    user_review = None
-    if is_member:
-        user_review = conn.execute(
-            """
-            SELECT rating, body
-            FROM group_reviews
-            WHERE group_id = ? AND user_id = ?
-            """,
-            (group_id, user_id),
-        ).fetchone()
-
-    conn.close()
 
     return render_template(
         "group_reviews.html",
@@ -653,90 +422,62 @@ def group_reviews(group_id):
 @login_required
 def edit_group(group_id):
     conn = get_db()
-    user_id = session["user_id"]
+    try:
+        user_id = session["user_id"]
+        group = groups_repo.find_with_admin(conn, group_id)
 
-    group = conn.execute(
-        """
-        SELECT sg.*, u.name AS admin_name
-        FROM study_groups sg
-        JOIN users u ON sg.admin_id = u.id
-        WHERE sg.id = ?
-        """,
-        (group_id,),
-    ).fetchone()
+        if group is None:
+            abort(404, description="That study group does not exist.")
 
-    if group is None:
-        conn.close()
-        abort(404, description="That study group does not exist.")
+        membership = groups_repo.membership_role(conn, group_id, user_id)
 
-    membership = conn.execute(
-        """
-        SELECT role
-        FROM group_members
-        WHERE group_id = ? AND user_id = ?
-        """,
-        (group_id, user_id),
-    ).fetchone()
+        if membership is None or membership["role"] != "admin":
+            flash("You no longer have permission to edit this study group.", "error")
+            return redirect(url_for("groups.dashboard"))
 
-    if membership is None or membership["role"] != "admin":
-        conn.close()
-        flash("You no longer have permission to edit this study group.", "error")
-        return redirect(url_for("groups.dashboard"))
+        member_count = groups_repo.member_count(conn, group_id)
+        min_members = max(1, member_count)
+        max_members_limit = max(MAX_MEMBERS_LIMIT, member_count)
 
-    member_count = conn.execute(
-        "SELECT COUNT(*) AS n FROM group_members WHERE group_id = ?",
-        (group_id,),
-    ).fetchone()["n"]
-    min_members = max(1, member_count)
-    max_members_limit = max(MAX_MEMBERS_LIMIT, member_count)
+        errors = {}
+        form_data = edit_group_form_data(group)
 
-    errors = {}
-    form_data = edit_group_form_data(group)
+        if request.method == "POST":
+            form_data = {
+                "title": request.form.get("title", "").strip(),
+                "description": request.form.get("description", "").strip(),
+                "location": request.form.get("location", "").strip(),
+                "max_members": request.form.get("max_members", "").strip(),
+                "meeting_time": request.form.get("meeting_time", "").strip(),
+                "study_style": request.form.get("study_style", "").strip(),
+            }
 
-    if request.method == "POST":
-        form_data = {
-            "title": request.form.get("title", "").strip(),
-            "description": request.form.get("description", "").strip(),
-            "location": request.form.get("location", "").strip(),
-            "max_members": request.form.get("max_members", "").strip(),
-            "meeting_time": request.form.get("meeting_time", "").strip(),
-            "study_style": request.form.get("study_style", "").strip(),
-        }
+            errors, max_members, meeting_time = validate_group_form(
+                form_data,
+                min_members=min_members,
+                max_members_limit=max_members_limit,
+            )
 
-        errors, max_members, meeting_time = validate_group_form(
-            form_data,
-            min_members=min_members,
-            max_members_limit=max_members_limit,
-        )
-
-        if not errors:
-            try:
-                conn.execute(
-                    """
-                    UPDATE study_groups
-                    SET title = ?, description = ?, location = ?, max_members = ?,
-                        meeting_time = ?, study_style = ?
-                    WHERE id = ?
-                    """,
-                    (
+            if not errors:
+                try:
+                    groups_repo.update(
+                        conn,
+                        group_id,
                         form_data["title"],
                         form_data["description"] or None,
                         form_data["location"] or None,
                         max_members,
                         meeting_time,
                         form_data["study_style"] or None,
-                        group_id,
-                    ),
-                )
-                conn.commit()
-                flash("Study group updated.", "success")
-                conn.close()
-                return redirect(url_for("groups.group_detail", group_id=group_id))
-            except sqlite3.Error:
-                conn.rollback()
-                errors["form"] = "Could not update the study group. Please try again."
-
-    conn.close()
+                    )
+                    conn.commit()
+                    flash("Study group updated.", "success")
+                    return redirect(url_for("groups.group_detail", group_id=group_id))
+                except sqlite3.Error:
+                    conn.rollback()
+                    errors["form"] = "Could not update the study group. Please try again."
+    finally:
+        conn.close()
 
     return render_template(
         "edit_group.html",
@@ -758,92 +499,66 @@ def edit_group(group_id):
 def create_study_group():
     user_id = session["user_id"]
     conn = get_db()
-    courses = conn.execute("SELECT * FROM courses ORDER BY code").fetchall()
+    try:
+        courses = courses_repo.list_all(conn)
 
-    errors = {}
-    form_data = {
-        "title": "",
-        "description": "",
-        "location": "",
-        "max_members": "6",
-        "meeting_time": "",
-        "study_style": "",
-    }
-    selected_course_ids = []
-
-    if request.method == "POST":
+        errors = {}
         form_data = {
-            "title": request.form.get("title", "").strip(),
-            "description": request.form.get("description", "").strip(),
-            "location": request.form.get("location", "").strip(),
-            "max_members": request.form.get("max_members", "").strip(),
-            "meeting_time": request.form.get("meeting_time", "").strip(),
-            "study_style": request.form.get("study_style", "").strip(),
+            "title": "",
+            "description": "",
+            "location": "",
+            "max_members": "6",
+            "meeting_time": "",
+            "study_style": "",
         }
-        selected_course_ids = request.form.getlist("course_ids")
+        selected_course_ids = []
 
-        errors, max_members, meeting_time = validate_group_form(form_data)
+        if request.method == "POST":
+            form_data = {
+                "title": request.form.get("title", "").strip(),
+                "description": request.form.get("description", "").strip(),
+                "location": request.form.get("location", "").strip(),
+                "max_members": request.form.get("max_members", "").strip(),
+                "meeting_time": request.form.get("meeting_time", "").strip(),
+                "study_style": request.form.get("study_style", "").strip(),
+            }
+            selected_course_ids = request.form.getlist("course_ids")
 
-        if not errors:
-            invite_code = new_invite_code()
-            try:
-                cursor = conn.execute(
-                    """
-                    INSERT INTO study_groups (
-                        title, description, max_members, member_count, meeting_time,
-                        location, study_style, admin_id, invite_code
-                    )
-                    VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?)
-                    """,
-                    (
+            errors, max_members, meeting_time = validate_group_form(form_data)
+
+            if not errors:
+                invite_code = new_invite_code()
+                try:
+                    group_id = groups_repo.create(
+                        conn,
                         form_data["title"],
                         form_data["description"] or None,
                         max_members,
-                        1,
                         meeting_time,
                         form_data["location"] or None,
                         form_data["study_style"] or None,
                         user_id,
                         invite_code,
-                    ),
-                )
-                group_id = cursor.lastrowid
+                    )
+                    groups_repo.add_admin_member(conn, group_id, user_id)
 
-                conn.execute(
-                    """
-                    INSERT INTO group_members (group_id, user_id, role)
-                    VALUES (?, ?, 'admin')
-                    """,
-                    (group_id, user_id),
-                )
+                    for course_id in selected_course_ids:
+                        try:
+                            cid = int(course_id)
+                        except ValueError:
+                            continue
+                        if courses_repo.exists(conn, cid):
+                            groups_repo.link_course(conn, group_id, cid)
 
-                for course_id in selected_course_ids:
-                    try:
-                        cid = int(course_id)
-                    except ValueError:
-                        continue
-                    exists = conn.execute(
-                        "SELECT 1 FROM courses WHERE id = ?",
-                        (cid,),
-                    ).fetchone()
-                    if exists:
-                        conn.execute(
-                            """
-                            INSERT INTO group_courses (group_id, course_id)
-                            VALUES (?, ?)
-                            """,
-                            (group_id, cid),
-                        )
+                    conn.commit()
+                    flash("Study group created. You are the group admin.")
+                    return redirect(url_for("main.home"))
+                except sqlite3.Error:
+                    conn.rollback()
+                    errors["form"] = "Could not create the study group. Please try again."
+    finally:
+        conn.close()
 
-                conn.commit()
-                conn.close()
-                flash("Study group created. You are the group admin.")
-                return redirect(url_for("main.home"))
-            except sqlite3.Error:
-                conn.rollback()
-                errors["form"] = "Could not create the study group. Please try again."
-
-    conn.close()
     return render_template(
         "create_study_group.html",
         courses=courses,
@@ -862,49 +577,25 @@ def create_study_group():
 @login_required
 def join_via_invite(code):
     conn = get_db()
-    user_id = session["user_id"]
-
-    group = conn.execute(
-        """
-        SELECT id, max_members,
-               (SELECT COUNT(*) FROM group_members gm WHERE gm.group_id = study_groups.id) AS member_count
-        FROM study_groups
-        WHERE invite_code = ?
-        """,
-        (code,),
-    ).fetchone()
-
-    if group is None:
-        conn.close()
-        flash("That invite link is invalid or expired.")
-        return redirect(url_for("groups.browse_groups"))
-
-    group_id = group["id"]
-    if user_is_group_member(conn, group_id, user_id):
-        conn.close()
-        flash("You are already in this group.")
-        return redirect(url_for("groups.group_detail", group_id=group_id))
-
-    if group["member_count"] >= group["max_members"]:
-        conn.close()
-        flash("This group is full.")
-        return redirect(url_for("groups.browse_groups"))
-
     try:
-        conn.execute(
-            "INSERT INTO group_members (group_id, user_id, role) VALUES (?, ?, 'member')",
-            (group_id, user_id),
-        )
-        conn.execute(
-            """
-            UPDATE study_groups
-            SET member_count = (
-                SELECT COUNT(*) FROM group_members WHERE group_id = ?
-            )
-            WHERE id = ?
-            """,
-            (group_id, group_id),
-        )
+        user_id = session["user_id"]
+        group = groups_repo.find_by_invite_code(conn, code)
+
+        if group is None:
+            flash("That invite link is invalid or expired.")
+            return redirect(url_for("groups.browse_groups"))
+
+        group_id = group["id"]
+        if groups_repo.is_member(conn, group_id, user_id):
+            flash("You are already in this group.")
+            return redirect(url_for("groups.group_detail", group_id=group_id))
+
+        if group["member_count"] >= group["max_members"]:
+            flash("This group is full.")
+            return redirect(url_for("groups.browse_groups"))
+
+        groups_repo.add_member(conn, group_id, user_id, role="member")
+        groups_repo.refresh_member_count(conn, group_id)
         conn.commit()
         flash("You joined the group via invite link.")
     except sqlite3.Error:
@@ -921,33 +612,26 @@ def join_via_invite(code):
 @login_required
 def create_group_invite(group_id):
     conn = get_db()
-    user_id = session["user_id"]
+    try:
+        user_id = session["user_id"]
+        group = groups_repo.admin_and_invite(conn, group_id)
+        if group is None:
+            flash("That study group does not exist.")
+            return redirect(url_for("groups.dashboard"))
 
-    group = conn.execute(
-        "SELECT admin_id, invite_code FROM study_groups WHERE id = ?",
-        (group_id,),
-    ).fetchone()
-    if group is None:
+        if group["admin_id"] != user_id:
+            flash("Only the group admin can create invite links.")
+            return redirect(url_for("groups.group_detail", group_id=group_id))
+
+        if not group["invite_code"]:
+            groups_repo.set_invite_code(conn, group_id, new_invite_code())
+            conn.commit()
+            flash("Invite link created.")
+        else:
+            flash("Invite link is already active.")
+    finally:
         conn.close()
-        flash("That study group does not exist.")
-        return redirect(url_for("groups.dashboard"))
 
-    if group["admin_id"] != user_id:
-        conn.close()
-        flash("Only the group admin can create invite links.")
-        return redirect(url_for("groups.group_detail", group_id=group_id))
-
-    if not group["invite_code"]:
-        conn.execute(
-            "UPDATE study_groups SET invite_code = ? WHERE id = ?",
-            (new_invite_code(), group_id),
-        )
-        conn.commit()
-        flash("Invite link created.")
-    else:
-        flash("Invite link is already active.")
-
-    conn.close()
     return redirect(url_for("groups.group_detail", group_id=group_id))
 
 
@@ -955,45 +639,24 @@ def create_group_invite(group_id):
 @login_required
 def join_group(group_id):
     conn = get_db()
-    user_id = session["user_id"]
     try:
-        group = conn.execute(
-            "SELECT max_members FROM study_groups WHERE id = ?",
-            (group_id,),
-        ).fetchone()
+        user_id = session["user_id"]
+        group = groups_repo.find_max_members(conn, group_id)
         if group is None:
             flash("That study group does not exist.")
             return redirect(url_for("groups.browse_groups"))
 
-        if conn.execute(
-            "SELECT 1 FROM group_members WHERE user_id = ? AND group_id = ?",
-            (user_id, group_id),
-        ).fetchone():
+        if groups_repo.is_member(conn, group_id, user_id):
             flash("You have already joined the group.")
             return redirect(url_for("groups.group_detail", group_id=group_id))
 
-        member_count = conn.execute(
-            "SELECT COUNT(*) AS n FROM group_members WHERE group_id = ?",
-            (group_id,),
-        ).fetchone()["n"]
+        member_count = groups_repo.member_count(conn, group_id)
         if member_count >= group["max_members"]:
             flash("Cannot join group. The group is already full.")
             return redirect(url_for("groups.browse_groups"))
 
-        conn.execute(
-            "INSERT INTO group_members (group_id, user_id) VALUES (?, ?)",
-            (group_id, user_id),
-        )
-        conn.execute(
-            """
-            UPDATE study_groups
-            SET member_count = (
-                SELECT COUNT(*) FROM group_members WHERE group_id = ?
-            )
-            WHERE id = ?
-            """,
-            (group_id, group_id),
-        )
+        groups_repo.add_member(conn, group_id, user_id)
+        groups_repo.refresh_member_count(conn, group_id)
         conn.commit()
         flash("Group joined successfully.")
         return redirect(url_for("groups.group_detail", group_id=group_id))
@@ -1009,30 +672,18 @@ def join_group(group_id):
 @login_required
 def leave_group(group_id):
     conn = get_db()
-    user_id = session["user_id"]
     try:
-        member = conn.execute("SELECT role FROM group_members WHERE user_id = ? AND group_id = ?", (user_id, group_id)).fetchone()
+        user_id = session["user_id"]
+        member = groups_repo.membership_role(conn, group_id, user_id)
         if member is None:
             flash("You are not in that group.")
             return redirect(url_for("groups.browse_groups"))
-        elif member["role"] == "admin":
+        if member["role"] == "admin":
             flash("Group admins cannot leave their own group yet. Edit the group instead.")
             return redirect(url_for("groups.group_detail", group_id=group_id))
 
-        conn.execute(
-            "DELETE FROM group_members WHERE group_id = ? AND user_id = ?",
-            (group_id, user_id),
-        )
-        conn.execute(
-            """
-            UPDATE study_groups
-            SET member_count = (
-                SELECT COUNT(*) FROM group_members WHERE group_id = ?
-            )
-            WHERE id = ?
-            """,
-            (group_id, group_id),
-        )
+        groups_repo.remove_member(conn, group_id, user_id)
+        groups_repo.refresh_member_count(conn, group_id)
         conn.commit()
         flash("Group left successfully.")
         return redirect(url_for("groups.browse_groups"))
