@@ -77,12 +77,12 @@
         <input
             type="datetime-local"
             name="meeting_time"
-            value="{{ meeting_time_value }}"
+            value="{{ form_data.meeting_time }}"
         >
         {% if errors.meeting_time %}
             <span class="field-error">{{ errors.meeting_time }}</span>
         {% endif %}
-        {% if group.meeting_time and not meeting_time_value %}
+        {% if group.meeting_time and not form_data.meeting_time %}
             <small>Current saved value: {{ group.meeting_time }}</small>
         {% endif %}
     </label>
