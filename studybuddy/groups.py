@@ -619,21 +619,16 @@ def join_via_invite(code):
             flash("This group is full.")
             return redirect(url_for("groups.browse_groups"))
 
-    try:
-        conn.execute(
-            "INSERT INTO group_members (group_id, user_id, role) VALUES (?, ?, 'member')",
-            (group_id, user_id),
-        )
+        groups_repo.add_member(conn, group_id, user_id, role="member")
         conn.commit()
         flash("You joined the group via invite link.")
+        return redirect(url_for("groups.group_detail", group_id=group_id))
     except sqlite3.Error:
         conn.rollback()
         flash("Could not join the group. Please try again.")
         return redirect(url_for("groups.browse_groups"))
     finally:
         conn.close()
-
-    return redirect(url_for("groups.group_detail", group_id=group_id))
 
 
 @bp.route("/groups/<int:group_id>/invite", methods=["POST"])
