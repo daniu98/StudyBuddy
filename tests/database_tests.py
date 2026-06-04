@@ -2,7 +2,7 @@ from flask import session, url_for
 
 from studybuddy.db import get_db
 
-from tests.helpers import check_redirect, login_placeholder
+from tests.helpers import check_redirect, signup_user, create_group
 
 
 def test_signup(client):
@@ -61,7 +61,7 @@ def test_signup(client):
 
 def test_login_logout(client):
     with client:
-        login_placeholder(client)
+        signup_user(client, "Placeholder", "blah@blah")
         exit = client.get(url_for("auth.logout"), follow_redirects=True)
         assert check_redirect(exit, url_for("main.home"))
 
@@ -96,7 +96,7 @@ def test_login_logout(client):
 
 def test_profile(client):
     with client:
-        login_placeholder(client)
+        signup_user(client, "Placeholder", "blah@blah")
         to_profile = client.get(url_for("auth.profile"))
         assert to_profile.status_code == 200
 
@@ -139,7 +139,7 @@ def test_group_create(client):
         )
         assert check_redirect(creation_reject, url_for("auth.login"))
 
-        login_placeholder(client)
+        signup_user(client, "Placeholder", "blah@blah")
         create_group = client.post(
             url_for("groups.create_study_group"),
             data={"title": "LePlaceholder", "max_members": 8},
@@ -160,7 +160,7 @@ def test_group_create(client):
 
 def test_join_leave_group(client):
     with client:
-        login_placeholder(client)
+        signup_user(client, "Placeholder", "blah@blah")
         client.post(
             url_for("groups.create_study_group"),
             data={"title": "LePlaceholder2", "max_members": 8},
@@ -195,7 +195,7 @@ def test_join_leave_group(client):
 
 def test_edit_group(client):
     with client:
-        login_placeholder(client)
+        signup_user(client, "Placeholder", "blah@blah")
         client.post(
             url_for("groups.create_study_group"),
             data={"title": "LePlaceholder2", "max_members": 8},
@@ -225,3 +225,13 @@ def test_edit_group(client):
         ).fetchone()
         assert row is not None
         conn.close()
+
+def test_group_search(client):
+    signup_user(client, "Creator", "creator@example.com")
+    create_group(client, "CS31 Midterm Crew", course_ids=["1"])
+    browse = client.get("/groups?course_id=1")
+    html = browse.get_data(as_text=True)
+    assert browse.status_code == 200
+    assert "CS31 Midterm Crew" in html, "search found group"
+    assert "You are a member" in html, "user in group"
+    assert not "Join group" in html

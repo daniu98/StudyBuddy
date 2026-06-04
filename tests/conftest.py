@@ -1,7 +1,9 @@
 import os
+from typing import Generator
 import shutil
 
 import pytest
+from playwright.sync_api import Page
 from studybuddy import create_app
 
 
@@ -33,3 +35,9 @@ def app(init_db):
 @pytest.fixture()
 def client(app):
     return app.test_client()
+
+
+@pytest.fixture()
+def webpage(init_db, page: Page):
+    page.set_default_timeout(7000)
+    yield page
