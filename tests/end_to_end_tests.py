@@ -1,79 +1,107 @@
+from playwright.sync_api import expect
+
+import os
 from studybuddy.db import get_db
 
-from tests.helpers import check_redirect, create_group, signup_user
+from tests.helpers import check_redirect, create_group, create_group_playwright, signup_user, signup_user_playwright, count_num
 
 
-def test_create_group_and_find_by_course(client):
-    signup_user(client, "Creator", "creator@example.com")
-    create_group(client, "CS31 Midterm Crew", course_ids=["1"])
+def test_signup_and_create_group_and_search_groups(webpage):
+    signup_user_playwright(webpage, "Creator", "creator@example.com")
 
-    browse = client.get("/groups?course_id=1")
-    html = browse.get_data(as_text=True)
-    assert browse.status_code == 200
-    assert "CS31 Midterm Crew" in html
-    assert "You are a member" in html
-    assert "Join group" not in html
+    webpage.get_by_role("link", name = "Find Groups").click()
+    assert webpage.get_by_text("Create the first group").count()
 
+    create_group_playwright(webpage, "Midterm Group", {0, 1}, "Suddenly, one day", "3", "Powell Library")
 
-def test_join_search_and_message_flow(client):
-    signup_user(client, "Owner", "owner@example.com")
-    create_group(client, "Shared Notes Group", course_ids=["1"])
+    webpage.get_by_role("link", name = "Find Groups").click()
+    assert webpage.get_by_text("Midterm Group").count() and webpage.get_by_text("You are a member").count()
+    assert webpage.get_by_text("MATH31a").count() and webpage.get_by_text("Computer Science").count()
 
-    conn = get_db()
-    group = conn.execute(
-        "SELECT id FROM study_groups WHERE title = 'Shared Notes Group'"
-    ).fetchone()
-    group_id = group["id"]
-    conn.close()
+    search_button = webpage.get_by_role("button", name = "Search")
+    searchbox = webpage.get_by_role("searchbox")
+    searchbox.fill("Midterm")
+    search_button.click()
+    assert count_num(webpage, ".dashboard-group-title", "Midterm") == 1, "text search includes group"
+    assert webpage.get_by_text("Midterm Group").count() and webpage.get_by_text("You are a member").count()
+    assert webpage.get_by_text("MATH31a").count() and webpage.get_by_text("Computer Science").count()
+    assert not webpage.get_by_text("Join Group").count()
+    searchbox.fill("Not")
+    search_button.click()
+    assert count_num(webpage, ".dashboard-group-title", "Midterm") == 0, "text search excludes group"
 
-    client.get("/logout", follow_redirects=True)
-    signup_user(client, "Member", "member@example.com")
-
-    join = client.post(f"/groups/{group_id}/join", follow_redirects=True)
-    assert check_redirect(join, f"/groups/{group_id}")
-
-    searched = client.get("/groups?q=Shared")
-    html = searched.get_data(as_text=True)
-    assert "Shared Notes Group" in html
-    assert "You are a member" in html
-    assert "Join group" not in html
-
-    post = client.post(
-        f"/groups/{group_id}/messages",
-        data={"body": "First study session this week."},
-        follow_redirects=True,
-    )
-    assert post.status_code == 200
-    assert "First study session this week." in post.get_data(as_text=True)
-
-    dashboard = client.get("/dashboard")
-    dashboard_html = dashboard.get_data(as_text=True)
-    assert dashboard.status_code == 200
-    assert "Your Activity Snapshot" in dashboard_html
-    assert "Shared Notes Group" in dashboard_html
-
-
-def test_group_review_flow(client):
-    signup_user(client, "Reviewer", "reviewer@example.com")
-    create_group(client, "Review Target Group", course_ids=["2"])
+    webpage.get_by_text("Clear").click()
+    dropdown = webpage.get_by_role("combobox")
+    dropdown.select_option(value="1")
+    search_button.click()
+    assert count_num(webpage, ".dashboard-group-title", "Midterm") == 1, "course search includes group"
+    assert webpage.get_by_text("Midterm Group").count() and webpage.get_by_text("members").count()
+    assert webpage.get_by_text("MATH31a").count() and webpage.get_by_text("Computer Science").count()
+    dropdown.select_option(value="3")
+    search_button.click()
+    assert count_num(webpage, ".dashboard-group-title", "Midterm") == 0, "course search includes group"
+    assert not(webpage.get_by_text("Midterm Group").count() and webpage.get_by_text("members").count())
 
     conn = get_db()
     group = conn.execute(
-        "SELECT id FROM study_groups WHERE title = 'Review Target Group'"
+        "SELECT id FROM study_groups WHERE title = 'Midterm Group' AND description = 'Suddenly, one day' AND max_members = 3 AND location = 'Powell Library'"
     ).fetchone()
-    group_id = group["id"]
+    assert group is not None
     conn.close()
 
-    submit = client.post(
-        f"/groups/{group_id}/reviews",
-        data={"rating": "5", "body": "Very helpful group."},
-        follow_redirects=True,
-    )
-    assert submit.status_code == 200
-    assert "Very helpful group." in submit.get_data(as_text=True)
 
-    browse = client.get("/groups")
-    browse_html = browse.get_data(as_text=True)
-    assert "Review Target Group" in browse_html
-    assert "View reviews" in browse_html
-    assert "5.0" in browse_html
+
+def test_join_and_group_page_and_message_flow(webpage):
+    signup_user_playwright(webpage, "Owner", "owner@example.com")
+    webpage.get_by_role("link", name = "Find Groups").click()
+    create_group_playwright(webpage, "Shared Notes Group", {2})
+
+    webpage.get_by_role("link", name = "Logout").click()
+    signup_user_playwright(webpage, "Stock Member", "member@example.com")
+
+    webpage.get_by_role("link", name = "Find Groups").click()
+    webpage.get_by_role("button", name = "Join Group").click()
+
+    assert webpage.get_by_text("Shared Notes Group").count() and webpage.get_by_text("admin").count() and webpage.get_by_text("owner").count()
+    assert webpage.get_by_text("Members").count() and webpage.get_by_text("8").count()
+    assert webpage.get_by_text("role: member").count()
+    assert webpage.get_by_text("location").count() and webpage.get_by_text("Powell").count()
+    assert webpage.get_by_text("Math 2").count()
+    
+    assert webpage.get_by_text("no messages").count()
+    webpage.get_by_role("textbox").fill("Placeholder Unique Worded Message")
+    webpage.get_by_role("button", name = "Send").click()
+    assert count_num(webpage, ".group-messages", "Placeholder Unique Worded Message") == 1
+    assert count_num(webpage, ".group-messages", "Stock Member") == 1
+
+    webpage.get_by_role("link", name = "Dashboard").all()[0].click()
+    assert webpage.get_by_text("Your Activity Snapshot").count()
+    assert webpage.get_by_text("Shared Notes Group").count()
+
+
+def test_group_review_flow(webpage):
+    signup_user_playwright(webpage, "Reviewer", "reviewer@example.com")
+    webpage.get_by_role("link", name = "Find Groups").click()
+    create_group_playwright(webpage, "Review Target Group", {2})
+
+    webpage.get_by_role("link", name = "Dashboard").click()
+    webpage.get_by_role("link", name = "Review Target Group").click()
+    webpage.get_by_role("link", name = "Group Reviews").click()
+    dropdown = webpage.get_by_role("combobox")
+    review_box = webpage.get_by_role("textbox", name = "Review")
+    dropdown.select_option(value="1")
+    review_box.fill("Very helpful group.")
+    webpage.get_by_role("button", name = "Submit review").click()
+
+    assert count_num(webpage, ".review-list", "Reviewer") == 1
+    assert count_num(webpage, ".review-list", "Very helpful group.") == 1
+    assert webpage.get_by_text("5").count()
+
+    dropdown.select_option(value="3")
+    review_box.fill("Acceptably helpful group.")
+    webpage.get_by_role("button", name = "Update review").click()
+    
+    assert count_num(webpage, ".review-form-section", "Update your review") == 1
+    assert count_num(webpage, ".review-list", "Reviewer") == 1
+    assert count_num(webpage, ".review-list", "Acceptably helpful group.") == 1
+    assert webpage.get_by_text("4").count()
