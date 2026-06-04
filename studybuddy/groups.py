@@ -358,64 +358,63 @@ def group_reviews(group_id):
 
         is_member = groups_repo.is_member(conn, group_id, user_id)
 
-        if request.method == "POST":
-            if not is_member:
-                flash("You must join this group before leaving a review.", "error")
-                return redirect(url_for("groups.group_reviews", group_id=group_id))
+        if request.method == "GET":
+            reviews = reviews_repo.list_for_group(conn, group_id)
+            summary = reviews_repo.summary_for_group(conn, group_id)
+            user_review = (
+                reviews_repo.user_review_body(conn, group_id, user_id)
+                if is_member
+                else None
+            )
+            return render_template(
+                "group_reviews.html",
+                group=group,
+                reviews=reviews,
+                summary=summary,
+                is_member=is_member,
+                user_review=user_review,
+                review_body_max_length=REVIEW_BODY_MAX_LENGTH,
+            )
 
-            raw_rating = request.form.get("rating", "").strip()
-            body = request.form.get("body", "").strip() or None
-
-            try:
-                rating = int(raw_rating)
-            except ValueError:
-                rating = None
-
-            if rating is None or rating < 1 or rating > 5:
-                flash("Please choose a rating from 1 to 5 stars.", "error")
-                return redirect(url_for("groups.group_reviews", group_id=group_id))
-
-            if body and len(body) > REVIEW_BODY_MAX_LENGTH:
-                flash(
-                    f"Review text must be {REVIEW_BODY_MAX_LENGTH} characters or fewer.",
-                    "error",
-                )
-                return redirect(url_for("groups.group_reviews", group_id=group_id))
-
-            existing = reviews_repo.find_user_review(conn, group_id, user_id)
-            try:
-                if existing:
-                    reviews_repo.update(conn, group_id, user_id, rating, body)
-                    flash("Your review has been updated.", "success")
-                else:
-                    reviews_repo.insert(conn, group_id, user_id, rating, body)
-                    flash("Your review has been saved.", "success")
-                conn.commit()
-            except sqlite3.Error:
-                conn.rollback()
-                flash("Could not save your review. Please try again.", "error")
-
+        if not is_member:
+            flash("You must join this group before leaving a review.", "error")
             return redirect(url_for("groups.group_reviews", group_id=group_id))
 
-        reviews = reviews_repo.list_for_group(conn, group_id)
-        summary = reviews_repo.summary_for_group(conn, group_id)
-        user_review = (
-            reviews_repo.user_review_body(conn, group_id, user_id)
-            if is_member
-            else None
-        )
+        raw_rating = request.form.get("rating", "").strip()
+        body = request.form.get("body", "").strip() or None
+
+        try:
+            rating = int(raw_rating)
+        except ValueError:
+            rating = None
+
+        if rating is None or rating < 1 or rating > 5:
+            flash("Please choose a rating from 1 to 5 stars.", "error")
+            return redirect(url_for("groups.group_reviews", group_id=group_id))
+
+        if body and len(body) > REVIEW_BODY_MAX_LENGTH:
+            flash(
+                f"Review text must be {REVIEW_BODY_MAX_LENGTH} characters or fewer.",
+                "error",
+            )
+            return redirect(url_for("groups.group_reviews", group_id=group_id))
+
+        existing = reviews_repo.find_user_review(conn, group_id, user_id)
+        try:
+            if existing:
+                reviews_repo.update(conn, group_id, user_id, rating, body)
+                flash("Your review has been updated.", "success")
+            else:
+                reviews_repo.insert(conn, group_id, user_id, rating, body)
+                flash("Your review has been saved.", "success")
+            conn.commit()
+        except sqlite3.Error:
+            conn.rollback()
+            flash("Could not save your review. Please try again.", "error")
+
+        return redirect(url_for("groups.group_reviews", group_id=group_id))
     finally:
         conn.close()
-
-    return render_template(
-        "group_reviews.html",
-        group=group,
-        reviews=reviews,
-        summary=summary,
-        is_member=is_member,
-        user_review=user_review,
-        review_body_max_length=REVIEW_BODY_MAX_LENGTH,
-    )
 
 
 @bp.route("/groups/<int:group_id>/edit", methods=["GET", "POST"])
@@ -442,40 +441,54 @@ def edit_group(group_id):
         errors = {}
         form_data = edit_group_form_data(group)
 
-        if request.method == "POST":
-            form_data = {
-                "title": request.form.get("title", "").strip(),
-                "description": request.form.get("description", "").strip(),
-                "location": request.form.get("location", "").strip(),
-                "max_members": request.form.get("max_members", "").strip(),
-                "meeting_time": request.form.get("meeting_time", "").strip(),
-                "study_style": request.form.get("study_style", "").strip(),
-            }
-
-            errors, max_members, meeting_time = validate_group_form(
-                form_data,
-                min_members=min_members,
+        if request.method == "GET":
+            return render_template(
+                "edit_group.html",
+                group=group,
+                errors=errors,
+                form_data=form_data,
+                meeting_time_value=form_data["meeting_time"],
+                study_style_options=STUDY_STYLE_OPTIONS,
+                title_max_length=TITLE_MAX_LENGTH,
+                description_max_length=DESCRIPTION_MAX_LENGTH,
+                location_max_length=LOCATION_MAX_LENGTH,
                 max_members_limit=max_members_limit,
+                min_members=min_members,
             )
 
-            if not errors:
-                try:
-                    groups_repo.update(
-                        conn,
-                        group_id,
-                        form_data["title"],
-                        form_data["description"] or None,
-                        form_data["location"] or None,
-                        max_members,
-                        meeting_time,
-                        form_data["study_style"] or None,
-                    )
-                    conn.commit()
-                    flash("Study group updated.", "success")
-                    return redirect(url_for("groups.group_detail", group_id=group_id))
-                except sqlite3.Error:
-                    conn.rollback()
-                    errors["form"] = "Could not update the study group. Please try again."
+        form_data = {
+            "title": request.form.get("title", "").strip(),
+            "description": request.form.get("description", "").strip(),
+            "location": request.form.get("location", "").strip(),
+            "max_members": request.form.get("max_members", "").strip(),
+            "meeting_time": request.form.get("meeting_time", "").strip(),
+            "study_style": request.form.get("study_style", "").strip(),
+        }
+
+        errors, max_members, meeting_time = validate_group_form(
+            form_data,
+            min_members=min_members,
+            max_members_limit=max_members_limit,
+        )
+
+        if not errors:
+            try:
+                groups_repo.update(
+                    conn,
+                    group_id,
+                    form_data["title"],
+                    form_data["description"] or None,
+                    form_data["location"] or None,
+                    max_members,
+                    meeting_time,
+                    form_data["study_style"] or None,
+                )
+                conn.commit()
+                flash("Study group updated.", "success")
+                return redirect(url_for("groups.group_detail", group_id=group_id))
+            except sqlite3.Error:
+                conn.rollback()
+                errors["form"] = "Could not update the study group. Please try again."
     finally:
         conn.close()
 
@@ -513,49 +526,62 @@ def create_study_group():
         }
         selected_course_ids = []
 
-        if request.method == "POST":
-            form_data = {
-                "title": request.form.get("title", "").strip(),
-                "description": request.form.get("description", "").strip(),
-                "location": request.form.get("location", "").strip(),
-                "max_members": request.form.get("max_members", "").strip(),
-                "meeting_time": request.form.get("meeting_time", "").strip(),
-                "study_style": request.form.get("study_style", "").strip(),
-            }
-            selected_course_ids = request.form.getlist("course_ids")
+        if request.method == "GET":
+            return render_template(
+                "create_study_group.html",
+                courses=courses,
+                errors=errors,
+                form_data=form_data,
+                selected_course_ids=selected_course_ids,
+                study_style_options=STUDY_STYLE_OPTIONS,
+                title_max_length=TITLE_MAX_LENGTH,
+                description_max_length=DESCRIPTION_MAX_LENGTH,
+                location_max_length=LOCATION_MAX_LENGTH,
+                max_members_limit=MAX_MEMBERS_LIMIT,
+            )
 
-            errors, max_members, meeting_time = validate_group_form(form_data)
+        form_data = {
+            "title": request.form.get("title", "").strip(),
+            "description": request.form.get("description", "").strip(),
+            "location": request.form.get("location", "").strip(),
+            "max_members": request.form.get("max_members", "").strip(),
+            "meeting_time": request.form.get("meeting_time", "").strip(),
+            "study_style": request.form.get("study_style", "").strip(),
+        }
+        selected_course_ids = request.form.getlist("course_ids")
 
-            if not errors:
-                invite_code = new_invite_code()
-                try:
-                    group_id = groups_repo.create(
-                        conn,
-                        form_data["title"],
-                        form_data["description"] or None,
-                        max_members,
-                        meeting_time,
-                        form_data["location"] or None,
-                        form_data["study_style"] or None,
-                        user_id,
-                        invite_code,
-                    )
-                    groups_repo.add_admin_member(conn, group_id, user_id)
+        errors, max_members, meeting_time = validate_group_form(form_data)
 
-                    for course_id in selected_course_ids:
-                        try:
-                            cid = int(course_id)
-                        except ValueError:
-                            continue
-                        if courses_repo.exists(conn, cid):
-                            groups_repo.link_course(conn, group_id, cid)
+        if not errors:
+            invite_code = new_invite_code()
+            try:
+                group_id = groups_repo.create(
+                    conn,
+                    form_data["title"],
+                    form_data["description"] or None,
+                    max_members,
+                    meeting_time,
+                    form_data["location"] or None,
+                    form_data["study_style"] or None,
+                    user_id,
+                    invite_code,
+                )
+                groups_repo.add_admin_member(conn, group_id, user_id)
 
-                    conn.commit()
-                    flash("Study group created. You are the group admin.")
-                    return redirect(url_for("main.home"))
-                except sqlite3.Error:
-                    conn.rollback()
-                    errors["form"] = "Could not create the study group. Please try again."
+                for course_id in selected_course_ids:
+                    try:
+                        cid = int(course_id)
+                    except ValueError:
+                        continue
+                    if courses_repo.exists(conn, cid):
+                        groups_repo.link_course(conn, group_id, cid)
+
+                conn.commit()
+                flash("Study group created. You are the group admin.")
+                return redirect(url_for("main.home"))
+            except sqlite3.Error:
+                conn.rollback()
+                errors["form"] = "Could not create the study group. Please try again."
     finally:
         conn.close()
 
