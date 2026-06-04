@@ -497,7 +497,6 @@ def edit_group(group_id):
         group=group,
         errors=errors,
         form_data=form_data,
-        meeting_time_value=form_data["meeting_time"],
         study_style_options=STUDY_STYLE_OPTIONS,
         title_max_length=TITLE_MAX_LENGTH,
         description_max_length=DESCRIPTION_MAX_LENGTH,
@@ -620,8 +619,11 @@ def join_via_invite(code):
             flash("This group is full.")
             return redirect(url_for("groups.browse_groups"))
 
-        groups_repo.add_member(conn, group_id, user_id, role="member")
-        groups_repo.refresh_member_count(conn, group_id)
+    try:
+        conn.execute(
+            "INSERT INTO group_members (group_id, user_id, role) VALUES (?, ?, 'member')",
+            (group_id, user_id),
+        )
         conn.commit()
         flash("You joined the group via invite link.")
     except sqlite3.Error:
@@ -681,8 +683,10 @@ def join_group(group_id):
             flash("Cannot join group. The group is already full.")
             return redirect(url_for("groups.browse_groups"))
 
-        groups_repo.add_member(conn, group_id, user_id)
-        groups_repo.refresh_member_count(conn, group_id)
+        conn.execute(
+            "INSERT INTO group_members (group_id, user_id) VALUES (?, ?)",
+            (group_id, user_id),
+        )
         conn.commit()
         flash("Group joined successfully.")
         return redirect(url_for("groups.group_detail", group_id=group_id))
@@ -708,8 +712,10 @@ def leave_group(group_id):
             flash("Group admins cannot leave their own group yet. Edit the group instead.")
             return redirect(url_for("groups.group_detail", group_id=group_id))
 
-        groups_repo.remove_member(conn, group_id, user_id)
-        groups_repo.refresh_member_count(conn, group_id)
+        conn.execute(
+            "DELETE FROM group_members WHERE group_id = ? AND user_id = ?",
+            (group_id, user_id),
+        )
         conn.commit()
         flash("Group left successfully.")
         return redirect(url_for("groups.browse_groups"))
