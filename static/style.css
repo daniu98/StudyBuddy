@@ -1,17 +1,39 @@
+:root {
+    --pink-dark: #b8336b;
+    --pink-darker: #8b2552;
+    --pink-light: #fdf0f5;
+    --pink-muted: #f5d6e6;
+    --pink-border: #e8a8c8;
+}
+
 body {
-    font-family: Arial;
+    font-family: "Times New Roman", Times, serif;
     background-color: #eeeeee;
     margin: 0;
 }
 
 header {
-    background-color: #3366aa;
+    background-color: var(--pink-dark);
     color: white;
     padding: 15px;
 }
 
-nav a {
+header a {
     color: white;
+    text-decoration: none;
+}
+
+header .logo {
+    font-weight: bold;
+    margin-right: 20px;
+}
+
+header a:hover {
+    color: white;
+    text-decoration: none;
+}
+
+nav a {
     margin-right: 15px;
 }
 
@@ -55,7 +77,7 @@ input, textarea, select {
 }
 
 button, .button {
-    background-color: #3366aa;
+    background-color: var(--pink-dark);
     color: white;
     padding: 8px;
     border: none;
@@ -126,8 +148,8 @@ button:disabled {
 }
 
 .dashboard-group-card:hover {
-    border-color: #3366aa;
-    background: #eef4fc;
+    border-color: var(--pink-dark);
+    background: var(--pink-light);
 }
 
 .dashboard-group-title {
@@ -167,9 +189,9 @@ button:disabled {
 
 .badge-pill {
     display: inline-block;
-    background: #e7f0ff;
-    color: #1f4b8f;
-    border: 1px solid #b7cef3;
+    background: var(--pink-muted);
+    color: var(--pink-darker);
+    border: 1px solid var(--pink-border);
     border-radius: 999px;
     padding: 2px 10px;
     font-size: 0.85em;
@@ -182,7 +204,7 @@ button:disabled {
 }
 
 .breadcrumb a {
-    color: #3366aa;
+    color: var(--pink-dark);
 }
 
 .message-board {
@@ -296,7 +318,7 @@ button:disabled {
 .browse-group-courses {
     display: block;
     font-size: 0.9em;
-    color: #3366aa;
+    color: var(--pink-dark);
     margin-top: 4px;
 }
 
@@ -319,7 +341,7 @@ button:disabled {
 
 .browse-group-title-link {
     text-decoration: none;
-    color: #1f4b8f;
+    color: var(--pink-darker);
 }
 
 .browse-group-title-link:hover {
@@ -336,7 +358,7 @@ button:disabled {
 
 .browse-group-reviews-link {
     font-size: 0.9em;
-    color: #3366aa;
+    color: var(--pink-dark);
     text-decoration: none;
 }
 
@@ -378,14 +400,14 @@ button:disabled {
 }
 
 .calendar-event a:hover .calendar-event-title {
-    color: #3366aa;
+    color: var(--pink-dark);
 }
 
 .calendar-event-time {
     display: inline-block;
     margin-right: 8px;
     font-weight: bold;
-    color: #1f4b8f;
+    color: var(--pink-darker);
 }
 
 .calendar-event-title {

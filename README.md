@@ -116,6 +116,8 @@ python3 -m pytest tests/ -v
 - `tests/database_test.py` — signup, login, profile, group create/join/leave/edit
 - `tests/end_to_end_tests.py` — full flows (course search, messaging, reviews, dashboard)
 
+For the end-to-end tests, you will need to have another terminal window running `app.py` in the background while `pytest` runs. To avoid unexpected errors, it is recommended to not use the server (**http://127.0.0.1:5001**) while the end-to-end tests run.
+
 Tests back up your local `studybuddy.db` to `tempdb.db` while they run, then restore it.
 
 ## Project layout
