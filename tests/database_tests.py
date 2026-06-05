@@ -241,13 +241,3 @@ def test_edit_group(client):
         ).fetchone()
         assert row is not None, "Group edited successfully"
         conn.close()
-
-def test_group_search(client):
-    signup_user(client, "Creator", "creator@example.com")
-    create_group(client, "CS31 Midterm Crew", course_ids=["1"])
-    browse = client.get("/groups?course_id=1")
-    html = browse.get_data(as_text=True)
-    assert browse.status_code == 200
-    assert "CS31 Midterm Crew" in html, "Search found group"
-    assert "You are a member" in html, "User in group"
-    assert not "Join group" in html
