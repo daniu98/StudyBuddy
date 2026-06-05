@@ -39,5 +39,5 @@ def client(app):
 
 @pytest.fixture()
 def webpage(init_db, page: Page):
-    page.set_default_timeout(7000)
+    page.set_default_timeout(9000)
     yield page

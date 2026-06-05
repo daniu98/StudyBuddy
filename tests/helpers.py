@@ -29,16 +29,21 @@ def create_group(client, title, course_ids=None, max_members=8):
         data["course_ids"] = course_ids
     return client.post("/study-groups/new", data=data, follow_redirects=True)
 
-def create_group_playwright(webpage, group_name, courses={}, description="", max_members="8", location="Powell Library"):
+def create_group_playwright(webpage, group_name, courses={}, description="", max_members="8", location="Powell Library", date_time="2000-01-01T14:00"):
     webpage.get_by_role("link", name = "Create Group").click()
     webpage.get_by_role("textbox", name = "Title").fill(group_name)
     webpage.get_by_role("textbox", name = "Description").fill(description)
     webpage.get_by_text("Max members").fill(max_members)
+    webpage.get_by_label("Meeting time").fill(date_time)
     webpage.get_by_role("textbox", name = "Location").fill(location)
     checkboxes = webpage.get_by_role("checkbox").all()
     for course_num in courses:
         checkboxes[course_num].click()
     webpage.get_by_role("button", name = "Create group").click()
+
+def send_message(webpage, message):
+    webpage.get_by_role("textbox").fill(message)
+    webpage.get_by_role("button", name = "Send").click()
 
 def count_num(webpage, html_class, desired_text):
     class_list = webpage.locator(html_class).all()
