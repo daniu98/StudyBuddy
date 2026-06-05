@@ -7,7 +7,7 @@
 }
 
 body {
-    font-family: Arial;
+    font-family: "Times New Roman", Times, serif;
     background-color: #eeeeee;
     margin: 0;
 }
@@ -18,8 +18,22 @@ header {
     padding: 15px;
 }
 
-nav a {
+header a {
     color: white;
+    text-decoration: none;
+}
+
+header .logo {
+    font-weight: bold;
+    margin-right: 20px;
+}
+
+header a:hover {
+    color: white;
+    text-decoration: none;
+}
+
+nav a {
     margin-right: 15px;
 }
 
