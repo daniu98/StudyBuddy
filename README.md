@@ -173,4 +173,4 @@ pytest tests/ -v
 
 ## UML Diagrams
 
-<embed src="/templates/UMLDiagram.pdf" type="application/pdf">
+<img width="704" height="767" alt="Screenshot 2026-06-05 232737" src="https://github.com/user-attachments/assets/5e004f59-5845-495c-8495-037a45b91e8b" />
