@@ -170,3 +170,7 @@ Run pytest from the project root, not from inside `tests/`:
 cd /path/to/StudyBuddy
 pytest tests/ -v
 ```
+
+## UML Diagrams
+
+<embed src="/templates/UMLDiagram.pdf" type="application/pdf">
