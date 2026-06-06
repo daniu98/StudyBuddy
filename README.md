@@ -174,3 +174,6 @@ pytest tests/ -v
 ## UML Diagrams
 
 <img width="704" height="767" alt="Screenshot 2026-06-05 232737" src="https://github.com/user-attachments/assets/5e004f59-5845-495c-8495-037a45b91e8b" />
+
+<img width="1313" height="983" alt="image" src="https://github.com/user-attachments/assets/2e481155-5146-4530-baa6-c575b8c46773" />
+
